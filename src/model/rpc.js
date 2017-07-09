@@ -1,5 +1,5 @@
 const EventEmitter = require('events')
-const request = require('co-request')
+const request = require('superagent')
 
 // TODO: really call it HTTP RPC?
 module.exports = class HttpRpc extends EventEmitter {
@@ -47,13 +47,10 @@ module.exports = class HttpRpc extends EventEmitter {
     const authToken = this._plugin._getAuthToken()
     const uri = rpcUri + '?method=' + method + '&prefix=' + prefix
     const result = await Promise.race([
-      request({
-        method: 'POST',
-        uri: uri,
-        body: params,
-        auth: { bearer: authToken },
-        json: true
-      }),
+      request
+        .post(uri)
+        .set('Authorization', 'Bearer ' + authToken)
+        .send(params),
       new Promise((resolve, reject) => {
         setTimeout(() => {
           reject(new Error('request to ' + uri + ' timed out.'))
