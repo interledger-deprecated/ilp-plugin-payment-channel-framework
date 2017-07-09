@@ -60,7 +60,7 @@ module.exports = class Validator {
     assertString(t.expiresAt, 'expiresAt')
 
     assert(t.to, 'must have a destination (.to)')
-    assertPrefix(t.ledger, this._prefix, 'ledger')
+    //assertPrefix(t.ledger, this._prefix, 'ledger')
   }
 
   validateIncomingMessage (m) {
@@ -79,7 +79,7 @@ module.exports = class Validator {
     }
 
     assert(m.to, 'must have a destination (.to)')
-    assertPrefix(m.ledger, this._prefix, 'ledger')
+    //assertPrefix(m.ledger, this._prefix, 'ledger')
   }
 
   validateFulfillment (f) {
@@ -88,13 +88,13 @@ module.exports = class Validator {
   }
 
   assertIncoming (o) {
-    assertAccount(o.from, this._peer, 'from')
-    assertAccount(o.to, this._account, 'to')
+    //assertAccount(o.from, this._peer, 'from')
+    //assertAccount(o.to, this._account, 'to')
   }
 
   assertOutgoing (o) {
-    assertAccount(o.from, this._account, 'from')
-    assertAccount(o.to, this._peer, 'to')
+    //assertAccount(o.from, this._account, 'from')
+    //assertAccount(o.to, this._peer, 'to')
   }
 }
 
