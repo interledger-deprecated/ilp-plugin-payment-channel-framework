@@ -116,6 +116,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       assertOptionType(opts, 'token', 'string')
       assertOptionType(opts, 'prefix', 'string')
 
+      if (this._stateful) {
+        this._rpc.addMethod('get_info', () => Promise.resolve(this.getInfo()))
+      }
+
       this._info = opts.info
       this._peerAccountName = this._stateful ? 'client' : 'server'
       this._accountName = this._stateful ? 'server' : 'client'
