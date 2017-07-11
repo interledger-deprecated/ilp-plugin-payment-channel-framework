@@ -13,7 +13,7 @@
 ## Installation
 
 ``` sh
-npm install --save ilp-plugin-virtual
+npm install --save ilp-plugin-payment-channel-framework
 ```
 
 # ILP Plugin Payment Channel Framework
