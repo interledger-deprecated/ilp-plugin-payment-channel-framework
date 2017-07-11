@@ -16,6 +16,60 @@
 npm install --save ilp-plugin-payment-channel-framework
 ```
 
+## Usage in ILP Kit
+
+This section explains how to use `ilp-plugin-payment-channel-framework` for an asymetric trustline in [ILP Kit](https://github.com/interledgerjs/ilp-kit/).
+
+To setup an asymetric trustline server, add the following to ILP Kit's configuration file (Note that all of the following configuration should go into a single line in your config file):
+
+
+```
+CONNECTOR_LEDGERS={
+  "g.us.usd.myledger": {
+      // your five-bells-ledger goes here
+    }
+  },
+  "g.eur.mytrustline.": {
+    "currency": "EUR",
+    "plugin": "ilp-plugin-payment-channel-framework",
+    "options": {
+      "maxBalance": "1000000000",
+      "prefix": "g.eur.mytrustline.",
+      "token": "shared_secret", // shared secret between server and client
+      "rpcUri": "https://wallet2.example/api/peers/rpc", // RPC endpoint of the trustline peer
+      "info": {
+      	"currencyScale": 9,
+      	"currencyCode": "EUR",
+      	"prefix": "g.eur.mytrustline.",
+      	"connectors": ["g.eur.mytrustline.server"]
+      }
+    },
+    "store": true
+  }
+}
+```
+
+Similarly, add the following to your ILP Kit's config to setup an asymetric trustline client (as with the server config, all of the following should go on a single line in your config file):
+
+```
+CONNECTOR_LEDGERS={
+  "g.us.usd.anotherledger": {
+      // your five-bells-ledger goes here
+    }
+  },
+  "g.eur.mytrustline.": {
+    "currency": "EUR",
+    "plugin": "ilp-plugin-payment-channel-framework",
+    "options": {
+      "prefix": "g.eur.mytrustline.",
+      "token": "shared_secret", // shared secret between server and client
+      "rpcUri": "https://wallet1.example/api/peers/rpc",
+    },
+    "store": false
+  }
+}
+```
+
 # ILP Plugin Payment Channel Framework
 
 The plugin payment channel framework includes all the functionality of
