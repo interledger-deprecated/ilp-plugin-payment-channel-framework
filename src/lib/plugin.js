@@ -408,21 +408,21 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async getBalance () {
     if (this._stateful) {
-      return await this._transfers.getBalance()
+      return this._transfers.getBalance()
     } else {
-      return await this.getPeerBalance()
+      return this.getPeerBalance()
     }
   }
 
   async _handleGetBalance () {
-    return await this._transfers.getBalance()
+    return this._transfers.getBalance()
   }
 
   async getFulfillment (transferId) {
     if (this._stateful) {
-      return await this._transfers.getFulfillment(transferId)
+      return this._transfers.getFulfillment(transferId)
     } else {
-      return await this._rpc.call('get_fulfillment', this._prefix, [ transferId ])
+      return this._rpc.call('get_fulfillment', this._prefix, [ transferId ])
     }
   }
 
@@ -476,7 +476,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async _handleGetLimit () {
-    return await this._transfers.getMaximum()
+    return this._transfers.getMaximum()
   }
 
   _stringNegate (num) {
