@@ -1,6 +1,5 @@
 'use strict'
 class ObjStore {
-
   constructor (init) {
     this.s = init || {}
   }
