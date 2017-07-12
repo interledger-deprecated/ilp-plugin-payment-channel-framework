@@ -96,7 +96,6 @@ module.exports = class Validator {
     assertAccount(o.from, this._account, 'from')
     assertAccount(o.to, this._peer, 'to')
   }
-
 }
 
 function assert (cond, msg) {
@@ -104,6 +103,7 @@ function assert (cond, msg) {
 }
 
 function assertType (value, name, type) {
+  // eslint-disable-next-line valid-typeof
   assert(!value || typeof (value) === type,
     'if defined, ' + name + ' (' + value + ') must be a ' + type)
 }

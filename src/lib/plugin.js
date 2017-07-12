@@ -19,6 +19,7 @@ const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegiste
 
 const assertOptionType = (opts, field, type) => {
   const val = opts[field]
+  // eslint-disable-next-line valid-typeof
   if (!val || typeof val !== type) {
     throw new InvalidFieldsError('invalid "' + field + '"; got ' + val)
   }
