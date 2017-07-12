@@ -3,7 +3,7 @@
 const nock = require('nock')
 const crypto = require('crypto')
 const uuid = require('uuid4')
-const request = require('co-request')
+const request = require('superagent')
 const IlpPacket = require('ilp-packet')
 const base64url = require('base64url')
 
@@ -340,12 +340,9 @@ describe('Send', () => {
         'one of the sendTransfer calls should fail')
 
       // this is the only way to clean up a nock
-      yield request({
-        uri: 'https://example.com/rpc?method=send_transfer&prefix=example.red.',
-        body: [transfer2],
-        json: true,
-        method: 'POST'
-      })
+      yield request
+        .post('https://example.com/rpc?method=send_transfer&prefix=example.red.')
+        .send([transfer2])
     })
 
     it('should not send a transfer without id', function () {

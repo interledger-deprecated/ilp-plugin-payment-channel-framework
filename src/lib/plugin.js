@@ -95,7 +95,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       Validator.validatePaymentChannelBackend(paymentChannelBackend)
 
       this._rpc.addMethod('get_limit', this._handleGetLimit)
-      this._rpc.addMethod('get_balance', this._getLowestBalance)
+      this._rpc.addMethod('get_balance', this._handleGetBalance)
       this._rpc.addMethod('get_info', () => Promise.resolve(this.getInfo))
 
       this._paychan = paymentChannelBackend || {}
@@ -414,8 +414,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 
-  _getLowestBalance () {
-    return Promise.resolve(this._lowestBalance.get())
+  async _handleGetBalance () {
+    return await this._transfers.getBalance()
   }
 
   async getFulfillment (transferId) {
