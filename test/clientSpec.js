@@ -59,7 +59,7 @@ describe('Asymmetric plugin virtual', () => {
     it('should get balance from peer', async function () {
       nock('https://example.com')
         .post('/rpc?method=get_balance&prefix=example.red.')
-        .reply(200, '-5')
+        .reply(200, -5)
 
       assert.equal(await this.plugin.getBalance(), '5')
     })

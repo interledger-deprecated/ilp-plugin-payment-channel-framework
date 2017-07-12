@@ -40,7 +40,7 @@ describe('Info', () => {
     it('return the result of the RPC call', function * () {
       nock('https://example.com')
         .post('/rpc?method=get_limit&prefix=example.red.', [])
-        .reply(200, '5')
+        .reply(200, 5)
 
       // the value is reversed so it makes sense to our side
       assert.equal((yield this.plugin.getLimit()), '-5')
@@ -51,7 +51,7 @@ describe('Info', () => {
     it('return the result of the RPC call', function * () {
       nock('https://example.com')
         .post('/rpc?method=get_balance&prefix=example.red.', [])
-        .reply(200, '5')
+        .reply(200, 5)
 
       // the value is reversed so it makes sense to our side
       assert.equal((yield this.plugin.getPeerBalance()), '-5')
