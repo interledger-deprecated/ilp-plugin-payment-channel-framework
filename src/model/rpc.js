@@ -23,7 +23,7 @@ module.exports = class HttpRpc extends EventEmitter {
       throw new Error('no method "' + method + '" found.')
     }
 
-    return await this._methods[method].apply(this._plugin, params)
+    return this._methods[method].apply(this._plugin, params)
   }
 
   async call (method, prefix, params) {
