@@ -357,7 +357,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.fulfill(transferId, fulfillment)
     this._safeEmit('outgoing_fulfill', transferInfo.transfer, fulfillment)
 
-    let result = true
+    let result
     try {
       result = await this._paychan.createOutgoingClaim(
         this._paychanContext,
@@ -366,7 +366,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this.debug('error creating outgoing claim:', e)
     }
 
-    return result
+    return result === undefined ? true : result
   }
 
   async rejectIncomingTransfer (transferId, reason) {
