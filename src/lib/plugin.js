@@ -237,7 +237,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const response = await this._requestHandler(message)
       .catch((e) => ({
         ledger: message.ledger,
-        to: message.from,
+        to: this.getPeerAccount(),
         from: this.getAccount(),
         ilp: base64url(IlpPacket.serializeIlpError({
           code: 'F00',
