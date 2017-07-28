@@ -10,7 +10,6 @@ module.exports = class Validator {
   constructor (opts) {
     this._account = opts.account
     this._peer = opts.peer
-    this._account = opts.account
     this._prefix = opts.prefix
   }
 
@@ -126,8 +125,8 @@ function assertPrefix (value, prefix, name) {
 function assertAccount (value, account, name) {
   if (!value) return
   assertString(value, name)
-  assert(value === account,
-    name + ' (' + value + ') must match account: ' + account)
+  assert(value.startsWith(account),
+    name + ' (' + value + ') must start with account: ' + account)
 }
 
 function assertConditionOrPreimage (value, name) {
