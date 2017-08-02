@@ -1,14 +1,35 @@
-# ilp-plugin-payment-channel-framework [![npm][npm-image]][npm-url] [![circle][circle-image]][circle-url] [![codecov][codecov-image]][codecov-url]
+# ILP Plugin Payment Channel Framework [![npm][npm-image]][npm-url] [![circle][circle-image]][circle-url] [![codecov][codecov-image]][codecov-url]
 
-[npm-image]: https://img.shields.io/npm/v/ilp-plugin-virtual.svg?style=flat
-[npm-url]: https://npmjs.org/package/ilp-plugin-virtual
-[circle-image]: https://circleci.com/gh/interledgerjs/ilp-plugin-virtual.svg?style=shield
-[circle-url]: https://circleci.com/gh/interledgerjs/ilp-plugin-virtual
-[codecov-image]: https://codecov.io/gh/interledgerjs/ilp-plugin-virtual/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/interledgerjs/ilp-plugin-virtual
+[npm-image]: https://img.shields.io/npm/v/ilp-plugin-payment-channel-framework.svg?style=flat
+[npm-url]: https://npmjs.org/package/ilp-plugin-payment-channel-framework
+[circle-image]: https://circleci.com/gh/interledgerjs/ilp-plugin-payment-channel-framework.svg?style=shield
+[circle-url]: https://circleci.com/gh/interledgerjs/ilp-plugin-payment-channel-framework
+[codecov-image]: https://codecov.io/gh/interledgerjs/ilp-plugin-payment-channel-framework/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/interledgerjs/ilp-plugin-payment-channel-framework
 
-> ILP virtual ledger plugin for directly transacting connectors, including a
-> framework for attaching on-ledger settlement mechanisms.
+> Implements a trustline ledger plugin that can be extended to settle automatically via a payment channel
+
+The ILP Plugin Payment Channel Framework implements a [trustline](https://github.com/interledger/rfcs/blob/master/0022-hashed-timelock-agreements/0022-hashed-timelock-agreements.md#trustlines) that can be extended with an automatic settlement mechanism such as a payment channel.
+
+The framework itself provides:
+
+- An [HTTP RPC protocol](https://github.com/interledger/rfcs/blob/master/0021-plugin-rpc-api/0021-plugin-rpc-api.md) for plugin communication
+- Peer balance tracking and limit enforcement
+- Transfer and message validation
+- Tracking transfers in a log
+
+This module exports a `makePaymentChannelPlugin` function that
+takes a [Payment Channel Module](#payment-channel-module-api), and returns a
+LedgerPlugin class. Because trustlines and payment channels require maintaining state,
+users of these plugins must provide a more sophisticated [backend](#backend-api-with-extensions-for-payment-channels)
+than is required by other types of plugins.
+
+- [Installation](#installation)
+- [Usage in ILP Kit](#usage-in-ilp-kit)
+- [Example Code (w/ Claims)](#example-code-with-claim-based-settlement)
+- [Example Code (w/ Payments)](#example-code-with-unconditional-payment-based-settlement)
+- [Payment Channel Module API](#payment-channel-module-api)
+- [Backend API, with Extensions for Payment Channels](#backend-api-with-extensions-for-payment-channels)
 
 ## Installation
 
@@ -18,10 +39,11 @@ npm install --save ilp-plugin-payment-channel-framework
 
 ## Usage in ILP Kit
 
+The Payment Channel Framework can be used directly (without a payment channel module) to act as an "asymmetric" trustline. In this case, only one party maintains and determines the balance. This is effectively a ledger with a single accountholder, or a trustline in which the accountholder trusts the ledger maintainer implicitly.
+
 This section explains how to use `ilp-plugin-payment-channel-framework` for an asymetric trustline in [ILP Kit](https://github.com/interledgerjs/ilp-kit/).
 
 To setup an asymetric trustline server, add the following to ILP Kit's configuration file (Note that all of the following configuration should go into a single line in your config file):
-
 
 ```
 CONNECTOR_LEDGERS={
@@ -70,24 +92,6 @@ CONNECTOR_LEDGERS={
 }
 ```
 
-# ILP Plugin Payment Channel Framework
-
-The plugin payment channel framework includes all the functionality of
-`ilp-plugin-virtual`, but wrapped around a [Payment Channel
-Module](#payment-channel-module-api). A payment channel module includes
-methods for securing a trustline balance, whether by payment channel claims or
-by periodically sending unconditional payments. The common functionality, such
-as implementing the ledger plugin interface, logging transfers, keeping
-balances, etc. are handled by the payment channel framework itself.
-
-ILP Plugin virtual exposes a field called `makePaymentChannelPlugin`.  This function
-takes a [Payment Channel Module](#payment-channel-module-api), and returns a
-LedgerPlugin class.
-
-- [Example Code (w/ Claims)](#example-code-with-claim-based-settlement)
-- [Example Code (w/ Payments)](#example-code-with-unconditional-payment-based-settlement)
-- [Extended Payment Channel Module API](#payment-channel-module-api)
-- [Plugin Context API](#plugin-context-api)
 
 ## Example Code with Claim-Based Settlement
 
@@ -104,7 +108,7 @@ many other blockchains) by signing transactions that pay out of some script
 output.
 
 ```js
-const { makePaymentChannelPlugin } = require('ilp-plugin-virtual')
+const { makePaymentChannelPlugin } = require('ilp-plugin-payment-channel-framework')
 const { NotAcceptedError } = require('ilp-plugin-shared').Errors
 const Network = require('some-example-network')
 const BigNumber = require('bignumber.js')
@@ -140,7 +144,7 @@ return makePaymentChannelPlugin({
 
     // establish metadata during the connection phase
     ctx.state.prefix = 'peer.network.' + (await Network.getChannelId()) + '.'
-    
+
     // create ILP addresses for self and peer by appending identifiers from the
     // network onto the prefix.
     ctx.state.account = ctx.state.prefix + (await Network.getChannelSource())
@@ -232,7 +236,7 @@ return makePaymentChannelPlugin({
 
 Unconditional payment settlement secures a trustline balance by sending payments
 on a system that doesn't support conditional transfers. Hashed timelock transfers
-go through plugin virtual like a clearing layer, and every so often a settlement
+go through the payment channel framework like a clearing layer, and every so often a settlement
 is sent to make sure the amount secured on the ledger doesn't get too far from
 the finalized amount owed.
 
@@ -240,7 +244,7 @@ Unlike creating a claim, sending a payment has side-effects (it alters an
 external system). Therefore, the code is slightly more complicated.
 
 ```js
-const { makePaymentChannelPlugin } = require('ilp-plugin-virtual')
+const { makePaymentChannelPlugin } = require('ilp-plugin-payment-channel-framework')
 const { NotAcceptedError } = require('ilp-plugin-shared').Errors
 const Network = require('some-example-network')
 const BigNumber = require('bignumber.js')
@@ -295,7 +299,7 @@ return makePaymentChannelPlugin({
   getInfo: (ctx) => (ctx.state.info),
 
   handleIncomingPrepare: async function (ctx, transfer) {
-    const incoming = await ctx.transferLog.getIncomingFulfilledAndPrepared() 
+    const incoming = await ctx.transferLog.getIncomingFulfilledAndPrepared()
 
     // Instead of getting the best claim, we're getting the sum of all our
     // incoming settlement transfers. This tells us how much incoming money has
@@ -362,7 +366,163 @@ return makePaymentChannelPlugin({
 }
 ```
 
+
+## Payment Channel Module API
+
+Calling `makePaymentChannelPlugin` with an object containing all of the
+functions defined below will return a class. This new class will perform all
+the functionality of ILP Plugin Virtual, and additionally use the supplied
+callbacks to handle settlement.
+
+Aside from `connect` and `disconnect`, the functions below might be called
+during the flow of an RPC request, so they should run fast. Any of these calls
+SHOULD NOT take longer than 500 ms if `await`-ed. If a slower operation
+is required, it should be run in the background so it doesn't block the flow of
+the function.
+
+The `PluginContext` is a bundle of objects passed into the Payment Channel
+Module methods, in order to access useful plugin state.
+
+| Field | Type | Description |
+|:--|:--|:--|
+| `state` | Object | Object to keep Payment Channel Module state. Persists between function calls, but not if the plugin is restarted. |
+| `rpc` | RPC | RPC object for this plugin. Can be used to call methods on peer. |
+| `backend` | [ExtendedPluginBackend](#backend-api-with-extensions-for-payment-channels) | Plugin backend (see below), for creating TransferLogs and MaxValueTrackers. |
+| `transferLog` | TransferLog | Plugin's TransferLog, containing all its ILP transfers. |
+| `plugin` | LedgerPlugin | Plugin object. Only LedgerPlugin Interface functions should be accessed. |
+
+------
+
+### `pluginName`
+
+This optional field defines the type of this plugin. For instance, if it is set
+to `example`, the class name will become `PluginExample`, and debug statements
+will be printed as `ilp-plugin-example`.
+
+#### Type
+
+String
+
+-------
+
+### `constructor (ctx, opts)`
+
+Called when the plugin is constructed.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+- `opts` (Object) options passed into plugin constructor.
+
+-------
+
+### `async connect (ctx, opts)`
+
+Called when `plugin.connect()` is called.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+
+-------
+
+### `getInfo (ctx)`
+
+Return the
+[LedgerInfo](https://github.com/interledger/rfcs/blob/master/0004-ledger-plugin-interface/0004-ledger-plugin-interface.md#class-ledgerinfo)
+of this payment channel. This function will not be called until after the
+plugin is connected. The prefix must be deterministic, as the connector
+requires plugin prefixes to be preconfigured.
+
+The framework code will automatically create a deep clone of the return value
+before returning to the plugin user.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+
+-------
+
+### `getAccount (ctx)`
+
+Return the ILP address of this account on the payment channel. The ILP prefix
+must match `getInfo().prefix`. This function will not be called until
+after the plugin is connected.
+
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+
+-------
+
+### `getPeerAccount (ctx)`
+
+Return the ILP address of the peer's account on the payment channel. The ILP
+prefix must match `getInfo().prefix`. This function will not be called until
+after the plugin is connected.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+
+-------
+
+### `async disconnect (ctx)`
+
+Called when `plugin.disconnect()` is called.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+
+-------
+
+### `async handleIncomingPrepare (ctx, transfer)`
+
+Called when an incoming transfer is being processed, but has not yet been
+prepared. If this function throws an error, the transfer will not be prepared
+and the error will be passed back to the peer.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+- `transfer` (Transfer) incoming transfer.
+
+-------
+
+### `async createOutgoingClaim (ctx, balance)`
+
+Called when settlement is triggered. This may occur in the flow of a single payment,
+or it may occur only once per several payments. The return value of this function is
+passed to the peer, and into their `handleIncomingClaim()` function. The return value must
+be stringifiable to JSON.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+- `balance` (Integer String) sum of all outgoing fulfilled transfers. This value is strictly increasing.
+
+-------
+
+### `async handleIncomingClaim (ctx, claim)`
+
+Called after peer's `createOutgoingClaim()` function is called.
+
+#### Parameters
+
+- `ctx` (PluginContext) current plugin context.
+- `claim` (Object) return value of peer's `createOutgoingClaim()` function.
+
 ## Backend API, with Extensions for Payment Channels
+
+Users of plugins created using this framework must provide a `backend` that implements these functions,
+which are necessary for maintaining the state of trustlines and payment channels.
+
+The main primitives exposed by the backend are:
+
+- **Max Value Tracker:** Maintains a value that can be atomically updated only with a greater value. Used for storing claims of increasing value.
+- **Transfer Log:** Stores transfer objects while atomically enforcing given minimum and/or maximum balances.
 
 -------
 
@@ -597,152 +757,3 @@ Returns the max value tracker's maximum entry.
 - `return.data` (Object) data attached to returned entry.
 
 -------
-
-## Plugin Context API
-
-The PluginContext is a bundle of objects passed into the Payment Channel
-Backend methods, in order to access useful plugin state.
-
-| Field | Type | Description |
-|:--|:--|:--|
-| `state` | Object | Object to keep Payment Channel Module state. Persists between function calls, but not if the plugin is restarted. |
-| `rpc` | RPC | RPC object for this plugin. Can be used to call methods on peer. |
-| `backend` | ExtendedPluginBackend | Plugin backend, for creating TransferLogs and MaxValueTrackers. |
-| `transferLog` | TransferLog | Plugin's TransferLog, containing all its ILP transfers. |
-| `plugin` | LedgerPlugin | Plugin object. Only LedgerPlugin Interface functions should be accessed. |
-
-## Payment Channel Module API
-
-Calling `makePaymentChannelPlugin` with an object containing all of the
-functions defined below will return a class. This new class will perform all
-the functionality of ILP Plugin Virtual, and additionally use the supplied
-callbacks to handle settlement.
-
-Aside from `connect` and `disconnect`, the functions below might be called
-during the flow of an RPC request, so they should run fast. Any of these calls
-SHOULD NOT take longer than 500 ms if `await`-ed. If a slower operation
-is required, it should be run in the background so it doesn't block the flow of
-the function.
-
-------
-
-### `pluginName`
-
-This optional field defines the type of this plugin. For instance, if it is set
-to `example`, the class name will become `PluginExample`, and debug statements
-will be printed as `ilp-plugin-example`.
-
-#### Type
-
-String
-
--------
-
-### `constructor (ctx, opts)`
-
-Called when the plugin is constructed.
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-- `opts` (Object) options passed into plugin constructor.
-
--------
-
-### `async connect (ctx, opts)`
-
-Called when `plugin.connect()` is called.
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-
--------
-
-### `getInfo (ctx)`
-
-Return the
-[LedgerInfo](https://github.com/interledger/rfcs/blob/master/0004-ledger-plugin-interface/0004-ledger-plugin-interface.md#class-ledgerinfo)
-of this payment channel. This function will not be called until after the
-plugin is connected. The prefix must be deterministic, as the connector
-requires plugin prefixes to be preconfigured.
-
-The framework code will automatically create a deep clone of the return value
-before returning to the plugin user.
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-
--------
-
-### `getAccount (ctx)`
-
-Return the ILP address of this account on the payment channel. The ILP prefix
-must match `getInfo().prefix`. This function will not be called until
-after the plugin is connected.
-
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-
--------
-
-### `getPeerAccount (ctx)`
-
-Return the ILP address of the peer's account on the payment channel. The ILP
-prefix must match `getInfo().prefix`. This function will not be called until
-after the plugin is connected.
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-
--------
-
-### `async disconnect (ctx)`
-
-Called when `plugin.disconnect()` is called.
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-
--------
-
-### `async handleIncomingPrepare (ctx, transfer)`
-
-Called when an incoming transfer is being processed, but has not yet been
-prepared. If this function throws an error, the transfer will not be prepared
-and the error will be passed back to the peer. 
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-- `transfer` (Transfer) incoming transfer.
-
--------
-
-### `async createOutgoingClaim (ctx, balance)`
-
-Called when settlement is triggered. This may occur in the flow of a single payment,
-or it may occur only once per several payments. The return value of this function is
-passed to the peer, and into their `handleIncomingClaim()` function. The return value must
-be stringifiable to JSON.
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-- `balance` (Integer String) sum of all outgoing fulfilled transfers. This value is strictly increasing.
-
--------
-
-### `async handleIncomingClaim (ctx, claim)`
-
-Called after peer's `createOutgoingClaim()` function is called.
-
-#### Parameters
-
-- `ctx` (PluginContext) current plugin context.
-- `claim` (Object) return value of peer's `createOutgoingClaim()` function.
