@@ -200,6 +200,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async sendMessage (message) {
+    this.assertConnectionBeforeCalling('sendMessage')
     this._validator.validateOutgoingMessage(message)
     await this._rpc.call('send_message', this._prefix, [message])
     this._safeEmit('outgoing_message', message)
@@ -216,6 +217,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async sendRequest (message) {
+    this.assertConnectionBeforeCalling('sendRequest')
     this._validator.validateOutgoingMessage(message)
     this._safeEmit('outgoing_request', message)
 
@@ -256,6 +258,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async sendTransfer (preTransfer) {
+    this.assertConnectionBeforeCalling('sendTransfer')
     const transfer = Object.assign({}, preTransfer, { ledger: this._prefix })
     this._validator.validateOutgoingTransfer(transfer)
 
@@ -306,6 +309,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async fulfillCondition (transferId, fulfillment) {
+    this.assertConnectionBeforeCalling('fulfillCondition')
     this._validator.validateFulfillment(fulfillment)
     const transferInfo = await this._transfers.get(transferId)
 
@@ -370,6 +374,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async rejectIncomingTransfer (transferId, reason) {
+    this.assertConnectionBeforeCalling('rejectIncomingTransfer')
     this.debug('going to reject ' + transferId)
     const transferInfo = await this._transfers.get(transferId)
 
@@ -412,6 +417,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async getBalance () {
+    this.assertConnectionBeforeCalling('getBalance')
     if (this._stateful) {
       return this._transfers.getBalance()
     } else {
@@ -424,6 +430,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async getFulfillment (transferId) {
+    this.assertConnectionBeforeCalling('getFulfillment')
     if (this._stateful) {
       return this._transfers.getFulfillment(transferId)
     } else {
@@ -495,12 +502,14 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async getLimit () {
+    this.assertConnectionBeforeCalling('getLimit')
     // rpc.call turns the balance into a number for some reason, so we turn it back to string
     const peerMaxBalance = String(await this._rpc.call('get_limit', this._prefix, []))
     return this._stringNegate(peerMaxBalance)
   }
 
   async getPeerBalance () {
+    this.assertConnectionBeforeCalling('getPeerBalance')
     const peerBalance = String(await this._rpc.call('get_balance', this._prefix, []))
     return this._stringNegate(peerBalance)
   }
@@ -511,6 +520,12 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     hash.update(fulfillment, 'base64')
     if (base64url(hash.digest()) !== condition) {
       throw new NotAcceptedError('Fulfillment does not match the condition')
+    }
+  }
+
+  assertConnectionBeforeCalling (functionName) {
+    if (!this._connected) {
+      throw new Error(`Must be connected before ${functionName} can be called.`)
     }
   }
 }
