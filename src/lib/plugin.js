@@ -6,7 +6,8 @@ const base64url = require('base64url')
 const IlpPacket = require('ilp-packet')
 const debug = require('debug')
 
-const HttpRpc = require('../model/rpc')
+const Clp = require('clp-packet')
+const ClpRpc = require('../model/rpc')
 const Validator = require('../util/validator')
 const getBackend = require('../util/backend')
 
@@ -23,6 +24,65 @@ const assertOptionType = (opts, field, type) => {
   if (!val || typeof val !== type) {
     throw new InvalidFieldsError('invalid "' + field + '"; got ' + val)
   }
+}
+
+const protocolDataToIlpAndCustom ({ protocolData }) {
+  const ret = {}
+
+  for (const protocol of protocolData) {
+    const name = protocol.protocolName
+    if (name === 'ilp') {
+      ret.ilp = base64url(protocol.data)
+      continue
+    }
+
+    ret.custom = ret.custom || {}
+    if (protocol.contentType === Clp.MIME_TEXT_PLAIN_UTF8) {
+      custom[name] = protocol.data.toString('utf8')
+    } else if (protocol.contentType === Clp.MIME_APPLICATION_JSON) {
+      custom[name] = JSON.parse(protocol.data.toString('utf8'))
+    } else {
+      custom[name] = protocol.data
+    }
+  }
+
+  return ret
+}
+
+const ilpAndCustomToProtocolData ({ ilp, custom }) {
+  const protocolData = [] 
+  if (ilp) {
+    protocolData.push({
+      protocolName: 'ilp',
+      contentType: Clp.MIME_APPLICATION_OCTET_STREAM,
+      data: Buffer.from(ilp, 'base64')
+    })
+  }
+
+  const sideProtocols = Object.keys(custom)
+  for (const protocol of sideProtocols) {
+    if (Buffer.isBuffer(custom[protocol])) {
+      protocolData.push({
+        protocolName: protocol,
+        contentType: Clp.MIME_APPLICATION_OCTET_STREAM,
+        data: custom[protocol]
+      })
+    } else if (typeof custom[protocol] === 'string') {
+      protocolData.push({
+        protocolName: protocol,
+        contentType: Clp.MIME_TEXT_PLAIN_UTF8,
+        data: Buffer.from(custom[protocol])
+      })
+    } else {
+      protocolData.push({
+        protocolName: protocol,
+        contentType: Clp.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify(custom[protocol]))
+      })
+    }
+  }
+
+  return protocolData
 }
 
 const moduleName = (paymentChannelBackend) => {
@@ -78,23 +138,22 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._requestHandler = null
 
     // register RPC methods
-    this._rpc = new HttpRpc({
-      rpcUris: this._rpcUris,
-      plugin: this,
+    this._rpc = new ClpRpc({
+      rpcUri: this._rpcUri,
+      account: this.getAccount(),
       debug: this.debug,
-      tolerateFailure: opts.tolerateRpcFailure
+      handlers: {
+        [Clp.TYPE_PREPARE]: this._handleTransfer.bind(this),
+        [Clp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
+        [Clp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
+        [Clp.TYPE_MESSAGE]: this._handleRequest.bind(this)
+      }
     })
-
-    this._rpc.addMethod('send_transfer', this._handleTransfer)
-    this._rpc.addMethod('send_message', this._handleMessage)
-    this._rpc.addMethod('send_request', this._handleRequest)
-    this._rpc.addMethod('fulfill_condition', this._handleFulfillCondition)
-    this._rpc.addMethod('reject_incoming_transfer', this._handleRejectIncomingTransfer)
-    this._rpc.addMethod('expire_transfer', this._handleExpireTransfer)
 
     if (this._stateful && paymentChannelBackend) {
       Validator.validatePaymentChannelBackend(paymentChannelBackend)
 
+      // TODO: TODO
       this._rpc.addMethod('get_limit', this._handleGetLimit)
       this._rpc.addMethod('get_balance', this._handleGetBalance)
       this._rpc.addMethod('get_info', () => Promise.resolve(this.getInfo))
@@ -176,7 +235,13 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async connect () {
     if (!this._stateful) {
-      this._info = await this._rpc.call('get_info', this._prefix, [])
+      this._info = await this._rpc.message({
+        protocolData: [{
+          protocolName: 'get_info',
+          contentType: Clp.MIME_APPLICATION_JSON,
+          data: Buffer.from('[]')
+        }]
+      })
     }
 
     await this._paychan.connect(this._paychanContext)
@@ -199,36 +264,51 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('disconnect')
   }
 
-  async sendMessage (message) {
-    this.assertConnectionBeforeCalling('sendMessage')
-    this._validator.validateOutgoingMessage(message)
-    await this._rpc.call('send_message', this._prefix, [message])
-    this._safeEmit('outgoing_message', message)
-  }
-
-  async _handleMessage (message) {
-    this._validator.validateIncomingMessage(message)
-
-    // assign legacy account field
-    this._safeEmit('incoming_message', Object.assign({},
-      message,
-      { account: this._prefix + this._peerAccountName }))
-    return true
-  }
-
   async sendRequest (message) {
     this.assertConnectionBeforeCalling('sendRequest')
     this._validator.validateOutgoingMessage(message)
     this._safeEmit('outgoing_request', message)
 
-    const response = await this._rpc.call('send_request', this._prefix, [message])
+    const response = await this._rpc.message({
+      protocolData: ilpAndCustomToProtocolData(message)
+    })
+
     this._validator.validateIncomingMessage(response)
     this._safeEmit('incoming_response', response)
 
     return response
   }
 
-  async _handleRequest (message) {
+  async _handleRequest (_message) {
+    const message = Object.assign({
+      id: _message.requestId,
+      to: this.getAccount(),
+      from: this.getPeerAccount()
+    }, protocolDataToIlpAndCustom(_message)) 
+
+    // if there are side protocols only
+    if (message.custom && !message.ilp) {
+      if (message.custom.get_info) {
+        return [{
+          protocolName: 'get_info',
+          contentType: Clp.MIME_APPLICATION_JSON,
+          data: JSON.stringify(this.getInfo())
+        }]
+      } else if (message.custom.get_balance) {
+        return [{
+          protocolName: 'get_balance',
+          contentType: Clp.MIME_APPLICATION_JSON,
+          data: JSON.stringify(await this._handleGetBalance())
+        }]
+      } else if (message.custom.get_limit) {
+        return [{
+          protocolName: 'get_limit',
+          contentType: Clp.MIME_APPLICATION_JSON,
+          data: JSON.stringify(await this._handleGetLimit())
+        }]
+      }
+    }
+
     this._validator.validateIncomingMessage(message)
     this._safeEmit('incoming_request', message)
 
@@ -254,7 +334,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validator.validateOutgoingMessage(response)
     this._safeEmit('outgoing_response', response)
 
-    return response
+    return ilpAndCustomToProtocolData(response)
   }
 
   async sendTransfer (preTransfer) {
@@ -267,10 +347,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.prepare(transfer, false)
 
     try {
-      await this._rpc.call('send_transfer', this._prefix, [Object.assign({},
+      await this._rpc.prepare(Object.assign({},
         transfer,
-        // erase our note to self
-        { noteToSelf: undefined })])
+        ilpAndCustomToProtocolData(transfer)))
 
       this.debug('transfer acknowledged ' + transfer.id)
     } catch (e) {
@@ -286,7 +365,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 
-  async _handleTransfer (transfer) {
+  async _handleTransfer (_transfer) {
+    const transfer = Object.assign({
+      id: _transfer.id,
+      amount: _transfer.amount,
+      executionCondition: _transfer.executionCondition,
+      expiresAt: _transfer.expiresAt,
+      to: this.getAccount(),
+      from: this.getPeerAccount()
+    }, protocolDataToIlpAndCustom(_transfer))
+
     this._validator.validateIncomingTransfer(transfer)
     await this._transfers.prepare(transfer, true)
 
@@ -330,7 +418,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validateFulfillment(fulfillment, transferInfo.transfer.executionCondition)
     await this._transfers.fulfill(transferId, fulfillment)
     this._safeEmit('incoming_fulfill', transferInfo.transfer, fulfillment)
-    const result = await this._rpc.call('fulfill_condition', this._prefix, [transferId, fulfillment])
+    const result = await this._rpc.fulfill({
+      id: transferId,
+      fulfillment,
+      protocolData: []
+    })
 
     try {
       await this._paychan.handleIncomingClaim(this._paychanContext, result)
@@ -339,7 +431,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 
-  async _handleFulfillCondition (transferId, fulfillment) {
+  async _handleFulfillCondition ({ id, fulfillment }) {
+    const transferId = id // TODO: useless rewrite
+
     this._validator.validateFulfillment(fulfillment)
     const transferInfo = await this._transfers.get(transferId)
 
@@ -392,10 +486,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.debug('rejected ' + transferId)
 
     this._safeEmit('incoming_reject', transferInfo.transfer, reason)
-    await this._rpc.call('reject_incoming_transfer', this._prefix, [transferId, reason])
+    await this._rpc.reject({
+      id: transferId,
+      reason,
+      protocolData: []
+    })
   }
 
-  async _handleRejectIncomingTransfer (transferId, reason) {
+  async _handleRejectIncomingTransfer ({ id, reason }) {
+    const transferId = id // TODO: useless rewrite
+
     this.debug('handling rejection of ' + transferId)
     const transferInfo = await this._transfers.get(transferId)
 
@@ -429,6 +529,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     return this._transfers.getBalance()
   }
 
+  /* TODO: reassess whether this is ever needed
   async getFulfillment (transferId) {
     this.assertConnectionBeforeCalling('getFulfillment')
     if (this._stateful) {
@@ -437,6 +538,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       return this._rpc.call('get_fulfillment', this._prefix, [ transferId ])
     }
   }
+  */
 
   _setupTransferExpiry (transferId, expiresAt) {
     const expiry = Date.parse(expiresAt)
@@ -459,7 +561,18 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       return
     }
 
-    await this._rpc.call('expire_transfer', this._prefix, [transferId]).catch(() => {})
+    await this._rpc.reject({
+      id: transferId,
+      reason: {
+        code: 'R00',
+        name: 'Transfer Timed Out',
+        triggeredBy: this.getAccount(),
+        forwardedBy: [],
+        triggeredAt: new Date(),
+        data: 'expired'
+      },
+      protocolData: []
+    }).catch(() => {})
     this._safeEmit((transferInfo.isIncoming ? 'incoming' : 'outgoing') + '_cancel',
       transferInfo.transfer)
   }
@@ -504,13 +617,25 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   async getLimit () {
     this.assertConnectionBeforeCalling('getLimit')
     // rpc.call turns the balance into a number for some reason, so we turn it back to string
-    const peerMaxBalance = String(await this._rpc.call('get_limit', this._prefix, []))
+    const peerMaxBalance = String(await this._rpc.message({
+      protocolData: [{
+        protocolName: 'get_limit',
+        contentType: Clp.MIME_APPLICATION_JSON,
+        data: Buffer.from('[]')
+      }]
+    })
     return this._stringNegate(peerMaxBalance)
   }
 
   async getPeerBalance () {
     this.assertConnectionBeforeCalling('getPeerBalance')
-    const peerBalance = String(await this._rpc.call('get_balance', this._prefix, []))
+    const peerBalance = String(await this._rpc.message({
+      protocolData: [{
+        protocolName: 'get_balance',
+        contentType: Clp.MIME_APPLICATION_JSON,
+        data: Buffer.from('[]')
+      }]
+    })
     return this._stringNegate(peerBalance)
   }
 

@@ -1,76 +1,154 @@
 const EventEmitter = require('events')
+const uuid = require('uuid')
 const request = require('superagent')
+const Clp = require('clp-packet')
+const WebSocket = require('ws')
 
-// TODO: really call it HTTP RPC?
-module.exports = class HttpRpc extends EventEmitter {
-  constructor ({ rpcUris, plugin, tolerateFailure, debug }) {
+// TODO: make it configurable
+const DEFAULT_TIMEOUT = 5000
+
+module.exports = class ClpRpc extends EventEmitter {
+  constructor ({ rpcUri, plugin, handlers, account }) {
     super()
-    this._methods = {}
-    this.debug = debug
-    this._plugin = plugin
-    this.rpcUris = rpcUris
-    this.tolerateFailure = tolerateFailure
+    this._sockets = []
+    this._handlers = handlers
+    this._rpcUri = rpcUri
+    this._account = account
+
+    assert(typeof this._handlers[Clp.TYPE_PREPARE] === 'function', 'Prepare handler missing')
+    assert(typeof this._handlers[Clp.TYPE_FULFILL] === 'function', 'Fulfill handler missing')
+    assert(typeof this._handlers[Clp.TYPE_REJECT] === 'function', 'Reject handler missing')
+    assert(typeof this._handlers[Clp.TYPE_MESSAGE] === 'function', 'Message handler missing')
   }
 
-  addMethod (name, handler) {
-    this._methods[name] = handler
+  addSocket (socket) {
+    this._sockets.push(socket)
+    socket.on('message', this.handleMessage.bind(this, socket))
   }
 
-  async receive (method, params) {
-    // TODO: 4XX when method doesn't exist
-    this.debug('incoming', method, 'from', this.rpcUris, 'with', params)
-    if (!this._methods[method]) {
-      throw new Error('no method "' + method + '" found.')
+  async handleMessage (socket, message) {
+    const { type, requestId } = Clp.readEnvelope(message)
+    let parsed
+
+    switch (type) {
+      Clp.TYPE_ACK:
+      Clp.TYPE_RESPONSE:
+      CLP.TYPE_ERROR:
+        this.emit('_' + requestId, message)
+        return
+
+      CLP.TYPE_PREPARE:
+        const parsed = Clp.deserializePrepare(message)
+        break
+      CLP.TYPE_FULFILL:
+        const parsed = Clp.deserializeFulfill(message)
+        break
+      CLP.TYPE_REJECT:
+        const parsed = Clp.deserializeReject(message)
+        break
+      CLP.TYPE_MESSAGE:
+        const parsed = Clp.deserializeMessage(message)
+        break
+
+      default:
+        throw new Error(type + ' is not a valid CLP message type')
     }
 
-    return this._methods[method].apply(this._plugin, params)
+    try {
+      const result = this.handlers[type].call(null, parsed)
+      socket.send(Clp.serializeResponse(requestId, result || []))
+    } catch (e) {
+      socket.send(Clp.serializeError({
+        rejectionReason: {
+          code: 'F00',
+          name: 'Bad Request',
+          triggeredBy: this._account,
+          forwardedBy: [],
+          triggeredAt: new Date(),
+          data: JSON.stringify({ message: e.message })
+        }
+      }, requestId, []))
+    }
   }
 
-  async call (method, prefix, params) {
-    const results = await Promise.all(this.rpcUris.map((uri) => {
-      this.debug('outgoing', method, 'to', uri, 'with', params)
-      return this._callUri(uri, method, prefix, params)
-        .catch((e) => {
-          if (!this.tolerateFailure) throw e
-        })
-    }))
+  async _call (id, data) {
+    if (!this.sockets.length) {
+      await this._connect()
+    }
 
-    return results.reduce((a, r) => {
-      if (a) this.debug('got RPC result:', a)
-      return a || r
+    await Promise.all(this.sockets.map(async (socket) => socket.send(data)))
+
+    const response = new Promise((resolve, reject) => {
+      this.once('_' + id, (message) => {
+        const type = message[0]
+        switch (type) {
+          Clp.TYPE_ACK:
+            resolve(Clp.deserializeAck(message))
+            break
+          Clp.TYPE_RESPONSE:
+            resolve(Clp.deserializeResponse(message))
+            break
+          CLP.TYPE_ERROR:
+            reject(new Error(JSON.stringify(Clp.deserializeResponse(message))))
+            break
+        }
+      })
+    })
+
+    const timeout = new Promise((resolve, reject) =>
+      setTimeout(() => reject(new Error(id + ' timed out')), DEFAULT_TIMEOUT))
+
+    return Promise.race([
+      response,
+      timeout
+    ])
+  }
+
+  async prepare ({ id, amount, executionCondition, expiresAt, protocolData }) {
+    const requestId = uuid()
+    const prepareRequest = Clp.serializePrepare({
+        id, amount, executionCondition, expiresAt
+      }, requestId, protocolData)
+
+    return _call(requestId, prepareRequest)
+  }
+
+  async fulfill ({ id, fulfillment, protocolData }) {
+    const requestId = uuid()
+    const fulfillRequest = Clp.serializeFulfill({
+        id, fulfillment
+      }, requestId, protocolData)
+
+    return _call(requestId, fulfillRequest)
+  }
+
+  async reject ({ id, reason, protocolData }) {
+    const requestId = uuid()
+    const rejectRequest = Clp.serializeReject({
+        id, reason
+      }, requestId, protocolData)
+
+    return _call(requestId, rejectRequest)
+  }
+
+  async message ({ protocolData }) {
+    const requestId = uuid()
+    const messageRequest = Clp.serializeReject(requestId, protocolData)
+
+    return _call(requestId, messageRequest)
+  }
+
+  async _connect () {
+    const ws = new WebSocket(this._rpcUri)
+    return new Promise((resolve) => {
+      ws.on('open', () => resolve())
     })
   }
 
-  async _callUri (rpcUri, method, prefix, params) {
-    this.debug('calling', method, 'with', params)
-
-    const authToken = this._plugin._getAuthToken()
-    const uri = rpcUri + '?method=' + method + '&prefix=' + prefix
-    const result = await Promise.race([
-      request
-        .post(uri)
-        .set('Authorization', 'Bearer ' + authToken)
-        .send(params),
-      new Promise((resolve, reject) => {
-        setTimeout(() => {
-          reject(new Error('request to ' + uri + ' timed out.'))
-        }, 2000)
-      })
-    ])
-
-    // 401 is a common error when a peering relationship isn't mutual, so a more
-    // helpful error is printed.
-    if (result.statusCode === 401) {
-      throw new Error('Unable to call "' + rpcUri +
-        '" (401 Unauthorized). They may not have you as a peer. (error body=' +
-        JSON.stringify(result.body) + ')')
-    }
-
-    if (result.statusCode !== 200) {
-      throw new Error('Unexpected status code ' + result.statusCode + ' from ' + rpcUri + ', with body "' +
-        JSON.stringify(result.body) + '"')
-    }
-
-    return result.body
+  disconnect () {
+    this.sockets.map((socket) => {
+      socket.close()
+    })
+    this.sockets = []
   }
 }
