@@ -8,6 +8,7 @@ const debug = require('debug')
 
 const Clp = require('clp-packet')
 const ClpRpc = require('../model/rpc')
+const CustomRpc = require('../model-custom-rpc')
 const Validator = require('../util/validator')
 const getBackend = require('../util/backend')
 
@@ -153,15 +154,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     if (this._stateful && paymentChannelBackend) {
       Validator.validatePaymentChannelBackend(paymentChannelBackend)
 
-      // TODO: TODO
-      this._rpc.addMethod('get_limit', this._handleGetLimit)
-      this._rpc.addMethod('get_balance', this._handleGetBalance)
-      this._rpc.addMethod('get_info', () => Promise.resolve(this.getInfo))
-
       this._paychan = paymentChannelBackend || {}
       this._paychanContext = {
         state: {},
-        rpc: this._rpc,
+        rpc: new CustomRpc({ clpRpc: this._rpc }),
+        clpRpc: this._rpc,
         backend: this._backend,
         transferLog: this._transfers,
         plugin: this
@@ -175,10 +172,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     } else {
       assertOptionType(opts, 'token', 'string')
       assertOptionType(opts, 'prefix', 'string')
-
-      if (this._stateful) {
-        this._rpc.addMethod('get_info', () => Promise.resolve(this.getInfo()))
-      }
 
       this._info = opts.info
       this._peerAccountName = this._stateful ? 'client' : 'server'
@@ -306,6 +299,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
           contentType: Clp.MIME_APPLICATION_JSON,
           data: JSON.stringify(await this._handleGetLimit())
         }]
+      } else {
+        return this._paychanContext.handleProtocols(message.custom)
       }
     }
 
