@@ -8,7 +8,7 @@ const debug = require('debug')
 
 const Clp = require('clp-packet')
 const ClpRpc = require('../model/rpc')
-const CustomRpc = require('../model-custom-rpc')
+const CustomRpc = require('../model/custom-rpc')
 const Validator = require('../util/validator')
 const getBackend = require('../util/backend')
 
@@ -27,7 +27,7 @@ const assertOptionType = (opts, field, type) => {
   }
 }
 
-const protocolDataToIlpAndCustom ({ protocolData }) {
+function protocolDataToIlpAndCustom ({ protocolData }) {
   const ret = {}
 
   for (const protocol of protocolData) {
@@ -50,7 +50,7 @@ const protocolDataToIlpAndCustom ({ protocolData }) {
   return ret
 }
 
-const ilpAndCustomToProtocolData ({ ilp, custom }) {
+function ilpAndCustomToProtocolData ({ ilp, custom }) {
   const protocolData = [] 
   if (ilp) {
     protocolData.push({
@@ -618,7 +618,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         contentType: Clp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
-    })
+    }))
     return this._stringNegate(peerMaxBalance)
   }
 
@@ -630,7 +630,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         contentType: Clp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
-    })
+    }))
     return this._stringNegate(peerBalance)
   }
 

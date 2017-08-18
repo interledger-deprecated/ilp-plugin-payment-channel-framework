@@ -1,6 +1,6 @@
 const Clp = require('clp-packet')
 
-module.exports = class CustomRpc extends EventEmitter {
+module.exports = class CustomRpc {
   constructor ({ clpRpc }) {
     this._clpRpc = clpRpc
     this._methods = {}
@@ -33,7 +33,7 @@ module.exports = class CustomRpc extends EventEmitter {
       const response = await this._methods[protocol].call(this._that, ...custom[protocol])
 
       responseProtocolData.push({
-        protocolName: protocol
+        protocolName: protocol,
         contentType: Clp.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(response))
       })
