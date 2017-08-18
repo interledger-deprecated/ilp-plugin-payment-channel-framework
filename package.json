@@ -58,7 +58,8 @@
     "eventemitter2": "^2.2.0",
     "ilp-packet": "^1.2.0",
     "superagent": "^3.5.2",
-    "uuid4": "^1.0.0"
+    "uuid4": "^1.0.0",
+    "ws": "^3.1.0"
   },
   "config": {
     "ghooks": {
