@@ -31,27 +31,27 @@ module.exports = class ClpRpc extends EventEmitter {
     let parsed
 
     switch (type) {
-      Clp.TYPE_ACK:
-      Clp.TYPE_RESPONSE:
-      CLP.TYPE_ERROR:
+      case Clp.TYPE_ACK:
+      case Clp.TYPE_RESPONSE:
+      case Clp.TYPE_ERROR:
         this.emit('_' + requestId, message)
         return
 
-      CLP.TYPE_PREPARE:
-        const parsed = Clp.deserializePrepare(message)
+      case Clp.TYPE_PREPARE:
+        parsed = Clp.deserializePrepare(message)
         break
-      CLP.TYPE_FULFILL:
-        const parsed = Clp.deserializeFulfill(message)
+      case Clp.TYPE_FULFILL:
+        parsed = Clp.deserializeFulfill(message)
         break
-      CLP.TYPE_REJECT:
-        const parsed = Clp.deserializeReject(message)
+      case Clp.TYPE_REJECT:
+        parsed = Clp.deserializeReject(message)
         break
-      CLP.TYPE_MESSAGE:
-        const parsed = Clp.deserializeMessage(message)
+      case Clp.TYPE_MESSAGE:
+        parsed = Clp.deserializeMessage(message)
         break
 
       default:
-        throw new Error(type + ' is not a valid CLP message type')
+        throw new Error(type + ' is not a valid Clp message type')
     }
 
     try {
@@ -82,13 +82,13 @@ module.exports = class ClpRpc extends EventEmitter {
       this.once('_' + id, (message) => {
         const type = message[0]
         switch (type) {
-          Clp.TYPE_ACK:
+          case Clp.TYPE_ACK:
             resolve(Clp.deserializeAck(message))
             break
-          Clp.TYPE_RESPONSE:
+          case Clp.TYPE_RESPONSE:
             resolve(Clp.deserializeResponse(message))
             break
-          CLP.TYPE_ERROR:
+          case Clp.TYPE_ERROR:
             reject(new Error(JSON.stringify(Clp.deserializeResponse(message))))
             break
         }
