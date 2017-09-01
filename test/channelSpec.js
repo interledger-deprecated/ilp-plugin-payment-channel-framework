@@ -1,16 +1,19 @@
 'use strict'
 
-const nock = require('nock')
 const crypto = require('crypto')
 const uuid = require('uuid4')
 const base64url = require('base64url')
+const clpPacket = require('clp-packet')
 
 const chai = require('chai')
 chai.use(require('chai-as-promised'))
 const assert = chai.assert
 
 const ObjStore = require('./helpers/objStore')
+const MockSocket = require('./helpers/mockSocket')
 const makePaymentChannelPlugin = require('..').makePaymentChannelPlugin
+const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+  require('../src/util/protocolDataConverter')
 
 describe('makePaymentChannelPlugin', function () {
   beforeEach(async function () {
@@ -40,7 +43,9 @@ describe('makePaymentChannelPlugin', function () {
       pluginName: 'dummy',
       connect: () => Promise.resolve(),
       disconnect: () => Promise.resolve(),
-      handleIncomingPrepare: () => Promise.resolve(),
+      handleIncomingPrepare: () => {
+        Promise.resolve()
+      },
       createOutgoingClaim: () => Promise.resolve(),
       handleIncomingClaim: () => Promise.resolve(),
       getInfo: () => this.info,
@@ -52,8 +57,9 @@ describe('makePaymentChannelPlugin', function () {
     this.PluginClass = makePaymentChannelPlugin(this.channel)
     this.plugin = new (this.PluginClass)(this.opts)
 
-    this.fulfillment = require('crypto').randomBytes(32)
-    this.transfer = {
+    this.fulfillment = crypto.randomBytes(32)
+
+    this.transferJson = {
       id: uuid(),
       ledger: this.plugin.getInfo().prefix,
       from: this.plugin.getAccount(),
@@ -68,8 +74,25 @@ describe('makePaymentChannelPlugin', function () {
         .update(this.fulfillment)
         .digest())
     }
+    const requestId = 12345
+
+    this.transfer = clpPacket.serializePrepare(
+      Object.assign({}, this.transferJson, {transferId: this.transferJson.id}),
+      requestId,
+      ilpAndCustomToProtocolData(this.transferJson))
+    this.clpFulfillment = clpPacket.serializeFulfill({
+      transferId: this.transferJson.id,
+      fulfillment: base64url(this.fulfillment)
+    }, requestId + 1, [])
+
+    this.mockSocket = new MockSocket()
+    this.plugin.addSocket(this.mockSocket)
 
     await this.plugin.connect()
+  })
+
+  afterEach(async function () {
+    assert(await this.mockSocket.isDone(), 'request handlers must have been called')
   })
 
   describe('constructor', function () {
@@ -137,14 +160,14 @@ describe('makePaymentChannelPlugin', function () {
         called = true
         assert.deepEqual(ctx.state, {})
         assert.equal(ctx.plugin, this.plugin)
-        assert.deepEqual(transfer, this.transfer)
+        assert.deepEqual(transfer, this.transferJson)
       }
 
-      this.transfer.from = this.transfer.to
-      this.transfer.to = this.plugin.getAccount()
+      this.transferJson.from = this.transferJson.to
+      this.transferJson.to = this.plugin.getAccount()
       const emitted = new Promise((resolve) => this.plugin.on('incoming_prepare', resolve))
 
-      await this.plugin.receive('send_transfer', [ this.transfer ])
+      this.plugin.receive(this.mockSocket, this.transfer)
       await emitted
       assert.equal(called, true)
 
@@ -166,8 +189,10 @@ describe('makePaymentChannelPlugin', function () {
         emitted = true
       })
 
+      this.mockSocket.reply(clpPacket.TYPE_ERROR)
+
       await assert.isRejected(
-        this.plugin.receive('send_transfer', [ this.transfer ]),
+        this.plugin.receive(this.mockSocket, this.transfer),
         /^no$/)
 
       assert.equal(called, true)
@@ -193,17 +218,18 @@ describe('makePaymentChannelPlugin', function () {
         }
       })
 
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200)
+      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = clpPacket.deserialize(this.transfer)
+        assert.deepEqual(data, expectedPacket.data)
+        return clpPacket.serializeResponse(requestId, [])
+      }).reply(clpPacket.TYPE_RESPONSE)
 
-      await this.plugin.sendTransfer(this.transfer)
-      await this.plugin.receive('fulfill_condition',
-        [ this.transfer.id, base64url(this.fulfillment) ])
+      await this.plugin.sendTransfer(this.transferJson)
+
+      await this.plugin.receive(this.mockSocket, this.clpFulfillment)
 
       await called
       assert.equal(await this.plugin._transfers.getOutgoingFulfilled(), '5')
-      assert(nock.isDone(), 'nocks must be called')
     })
 
     it('should not fail fulfillCondition if it fails', async function () {
@@ -211,16 +237,17 @@ describe('makePaymentChannelPlugin', function () {
         throw new Error('this will be logged but swallowed')
       }
 
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200)
+      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = clpPacket.deserialize(this.transfer)
+        assert.deepEqual(data, expectedPacket.data)
 
-      await this.plugin.sendTransfer(this.transfer)
-      await this.plugin.receive('fulfill_condition',
-        [ this.transfer.id, base64url(this.fulfillment) ])
+        return clpPacket.serializeResponse(requestId, [])
+      }).reply(clpPacket.TYPE_RESPONSE)
+
+      await this.plugin.sendTransfer(this.transferJson)
+      await this.plugin.receive(this.mockSocket, this.clpFulfillment)
 
       assert.equal(await this.plugin._transfers.getOutgoingFulfilled(), '5')
-      assert(nock.isDone(), 'nocks must be called')
     })
   })
 
@@ -231,6 +258,7 @@ describe('makePaymentChannelPlugin', function () {
           try {
             assert.deepEqual(ctx.state, {})
             assert.equal(ctx.plugin, this.plugin)
+            // TODO: Decide on the claim side-protocol
             assert.deepEqual(claim, { foo: 'bar' })
           } catch (e) {
             reject(e)
@@ -239,19 +267,23 @@ describe('makePaymentChannelPlugin', function () {
         }
       })
 
-      nock('https://example.com')
-        .post('/rpc?method=fulfill_condition&prefix=example.red.',
-          [ this.transfer.id, base64url(this.fulfillment) ])
-        .reply(200, { foo: 'bar' })
+      this.mockSocket
+        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(clpPacket.TYPE_FULFILL, ({requestId, data}) => {
+          return clpPacket.serializeResponse(requestId, [{
+            protocolName: 'claim',
+            contentType: clpPacket.MIME_APPLICATION_JSON,
+            data: Buffer.from(JSON.stringify({ foo: 'bar' }))
+          }])
+        })
 
       this.transfer.from = this.transfer.to
       this.transfer.to = this.plugin.getAccount()
 
-      await this.plugin.receive('send_transfer', [ this.transfer ])
-      await this.plugin.fulfillCondition(this.transfer.id, base64url(this.fulfillment))
+      await this.plugin.receive(this.mockSocket, this.transfer)
+      await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
 
       await called
-      assert(nock.isDone(), 'nocks must be called')
     })
 
     it('should not fail fulfillCondition if it throws', async function () {
@@ -259,18 +291,23 @@ describe('makePaymentChannelPlugin', function () {
         throw new Error('will be logged but swallowed')
       }
 
-      nock('https://example.com')
-        .post('/rpc?method=fulfill_condition&prefix=example.red.',
-          [ this.transfer.id, base64url(this.fulfillment) ])
-        .reply(200, { foo: 'bar' })
+      this.mockSocket
+        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(clpPacket.TYPE_FULFILL, ({requestId, data}) => {
+          assert.equal(data.transferId, this.transferJson.id)
+          assert.equal(data.fulfillment, base64url(this.fulfillment))
+          return clpPacket.serializeResponse(requestId, [{
+            protocolName: 'claim',
+            contentType: clpPacket.MIME_APPLICATION_JSON,
+            data: Buffer.from(JSON.stringify({ foo: 'bar' }))
+          }])
+        })
 
       this.transfer.from = this.transfer.to
       this.transfer.to = this.plugin.getAccount()
 
-      await this.plugin.receive('send_transfer', [ this.transfer ])
-      await this.plugin.fulfillCondition(this.transfer.id, base64url(this.fulfillment))
-
-      assert(nock.isDone(), 'nocks must be called')
+      await this.plugin.receive(this.mockSocket, this.transfer)
+      await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
     })
   })
 })
