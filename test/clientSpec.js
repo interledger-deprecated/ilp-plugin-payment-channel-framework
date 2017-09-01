@@ -1,15 +1,19 @@
 'use strict'
 
-const nock = require('nock')
 const crypto = require('crypto')
 const base64url = require('base64url')
+const clpPacket = require('clp-packet')
+const ilpPacket = require('ilp-packet')
 
 const chai = require('chai')
 chai.use(require('chai-as-promised'))
 const assert = chai.assert
 
 const getObjBackend = require('../src/util/backend')
+const MockSocket = require('./helpers/mockSocket')
 const PluginPaymentChannel = require('..')
+const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+  require('../src/util/protocolDataConverter')
 
 const conditionPair = () => {
   const preimage = crypto.randomBytes(32)
@@ -41,14 +45,24 @@ const options = {
 
 describe('Asymmetric plugin virtual', () => {
   beforeEach(function * () {
-    nock('https://example.com')
-      .post('/rpc?method=get_info&prefix=example.red.')
-      .reply(200, info)
+    this.mockSocket = new MockSocket()
+    this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId}) => {
+      return clpPacket.serializeResponse(requestId, [{
+        protocolName: 'get_info',
+        contentType: clpPacket.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify(info))
+      }])
+    })
 
     this.plugin = new PluginPaymentChannel(Object.assign({},
       options))
 
+    this.plugin.addSocket(this.mockSocket)
     yield this.plugin.connect()
+  })
+
+  afterEach(function () {
+    assert(this.mockSocket.isDone(), 'response handlers must be called')
   })
 
   describe('setup', () => {
@@ -57,9 +71,13 @@ describe('Asymmetric plugin virtual', () => {
     })
 
     it('should get balance from peer', async function () {
-      nock('https://example.com')
-        .post('/rpc?method=get_balance&prefix=example.red.')
-        .reply(200, -5)
+      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId}) => {
+        return clpPacket.serializeResponse(requestId, [{
+          protocolName: 'get_balance',
+          contentType: clpPacket.MIME_APPLICATION_JSON,
+          data: Buffer.from(JSON.stringify(-5))
+        }])
+      })
 
       assert.equal(await this.plugin.getBalance(), '5')
     })
@@ -71,24 +89,41 @@ describe('Asymmetric plugin virtual', () => {
 
       this.condition = condition
       this.fulfillment = fulfillment
-      this.transfer = {
+      this.transferJson = {
         id: '5709e97e-ffb5-5454-5c53-cfaa5a0cd4c1',
         to: peerAddress,
         amount: '10',
         executionCondition: condition,
         expiresAt: new Date(Date.now() + 1000).toISOString()
       }
+      const requestId = 12345
+
+      this.transfer = clpPacket.serializePrepare(
+        Object.assign({},
+          this.transferJson,
+          {transferId: this.transferJson.id}),
+        requestId,
+        ilpAndCustomToProtocolData(this.transferJson)
+      )
+      this.clpFulfillment = clpPacket.serializeFulfill({
+        transferId: this.transferJson.id,
+        fulfillment: this.fulfillment
+      }, requestId + 1, [])
     })
 
+    // TODO: assess whether this test case is necessary.
+    // There is a test with the same name in sendSpec.js
     it('should send a request', async function () {
       const response = {
-        to: this.plugin.getAccount(),
-        ilp: 'some_base64_encoded_data_goes_here'
+        // TODO: CLP has no .to. Refactor code to take out .to, .from, and .ledger
+        // to: this.plugin.getAccount(), 
+        ilp: base64url('some_base64_encoded_data_goes_here')
       }
 
-      nock('https://example.com')
-        .post('/rpc?method=send_request&prefix=example.red.')
-        .reply(200, response)
+      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId}) => {
+        return clpPacket.serializeResponse(requestId,
+          ilpAndCustomToProtocolData(response))
+      })
 
       const result = await this.plugin.sendRequest({
         to: peerAddress,
@@ -99,62 +134,85 @@ describe('Asymmetric plugin virtual', () => {
     })
 
     it('should prepare and execute a transfer', async function () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [ this.transfer ])
-        .reply(200, true)
+      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = clpPacket.deserialize(this.transfer)
+        assert.deepEqual(data, expectedPacket.data)
+        return clpPacket.serializeResponse(requestId, [])
+      })
 
       const prepared = new Promise((resolve) =>
         this.plugin.once('outgoing_prepare', () => resolve()))
 
-      await this.plugin.sendTransfer(this.transfer)
+      await this.plugin.sendTransfer(this.transferJson)
       await prepared
 
       const fulfilled = new Promise((resolve) =>
         this.plugin.once('outgoing_fulfill', () => resolve()))
 
-      await this.plugin.receive('fulfill_condition',
-        [ this.transfer.id, this.fulfillment ])
+      await this.plugin.receive(this.mockSocket, this.clpFulfillment)
       await fulfilled
     })
 
     it('should receive and fulfill a transfer', async function () {
-      this.transfer.to = this.plugin.getAccount()
+      this.transferJson.to = this.plugin.getAccount() // TODO: needed?
+
+      this.mockSocket
+        .reply(clpPacket.TYPE_RESPONSE, ({requestId, data}) => {
+          return clpPacket.serializeResponse(requestId, [])
+        })
+        .reply(clpPacket.TYPE_FULFILL, ({requestId, data}) => {
+          assert.equal(data.transferId, this.transferJson.id)
+          assert.equal(data.fulfillment, this.fulfillment)
+          return clpPacket.serializeResponse(requestId, [])
+        })
+
       const prepared = new Promise((resolve) =>
         this.plugin.once('incoming_prepare', () => resolve()))
 
-      await this.plugin.receive('send_transfer', [ this.transfer ])
+      await this.plugin.receive(this.mockSocket, this.transfer)
       await prepared
-
-      nock('https://example.com')
-        .post('/rpc?method=fulfill_condition&prefix=example.red.',
-          [ this.transfer.id, this.fulfillment ])
-        .reply(200, true)
 
       const fulfilled = new Promise((resolve) =>
         this.plugin.once('incoming_fulfill', () => resolve()))
 
-      await this.plugin.fulfillCondition(this.transfer.id, this.fulfillment)
+      await this.plugin.fulfillCondition(this.transferJson.id, this.fulfillment)
       await fulfilled
     })
 
     it('should not send a transfer if peer gives error', async function () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [ this.transfer ])
-        .reply(500)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+
+          const ilp = ilpPacket.serializeIlpError({
+            code: 'F00',
+            name: 'Bad Request',
+            triggeredBy: '',
+            forwardedBy: [],
+            triggeredAt: new Date(),
+            data: JSON.stringify({ message: 'Peer isn\'t feeling like it.' })
+          })
+
+          return clpPacket.serializeError({rejectionReason: ilp}, requestId, [])
+        })
 
       const prepared = new Promise((resolve, reject) => {
-        this.plugin.once('outgoing_prepare', () =>
-          reject(new Error('should not be accepted')))
+        this.plugin.once('outgoing_prepare', () => {
+          reject(new Error('should not be accepted'))
+        })
         setTimeout(resolve, 10)
       })
 
-      await assert.isRejected(this.plugin.sendTransfer(this.transfer))
+      await assert.isRejected(this.plugin.sendTransfer(this.transferJson))
       await prepared
     })
   })
 
   describe('server', function () {
-    it('should call several plugins over RPC', async function () {
+    // TODO: Is this test case still relevant?  (cc: sharafian)
+    // Would you ever add several several sockets to a single plugin?
+    it.skip('should call several plugins over RPC', async function () {
       const _options = Object.assign({}, options)
 
       delete _options.rpcUri
@@ -167,13 +225,21 @@ describe('Asymmetric plugin virtual', () => {
         'https://example.com/3/rpc'
       ]
 
-      nock('https://example.com')
-        .post('/1/rpc?method=send_transfer&prefix=example.red.')
-        .reply(200, true)
-        .post('/2/rpc?method=send_transfer&prefix=example.red.')
-        .reply(200, true)
-        .post('/3/rpc?method=send_transfer&prefix=example.red.')
-        .reply(500) // should tolerate an error from one
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
+        // .reply(....)
+
+      // nock('https://example.com')
+      //   .post('/1/rpc?method=send_transfer&prefix=example.red.')
+      //   .reply(200, true)
+      //   .post('/2/rpc?method=send_transfer&prefix=example.red.')
+      //   .reply(200, true)
+      //   .post('/3/rpc?method=send_transfer&prefix=example.red.')
+      //   .reply(500) // should tolerate an error from one
 
       this.plugin = new PluginPaymentChannel(_options)
       await this.plugin.connect()
@@ -186,7 +252,7 @@ describe('Asymmetric plugin virtual', () => {
         expiresAt: new Date(Date.now() + 1000).toISOString()
       })
 
-      nock.isDone()
+      assert(this.mockSocket.isDone())
     })
   })
 })
