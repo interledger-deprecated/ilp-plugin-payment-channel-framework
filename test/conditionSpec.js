@@ -1,6 +1,6 @@
 'use strict'
 
-const nock = require('nock')
+// const nock = require('nock')
 const uuid = require('uuid4')
 const crypto = require('crypto')
 const base64url = require('base64url')
@@ -9,8 +9,13 @@ const chai = require('chai')
 chai.use(require('chai-as-promised'))
 const assert = chai.assert
 const expect = chai.expect
+const clpPacket = require('clp-packet')
+const ilpPacket = require('ilp-packet')
 
+const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+  require('../src/util/protocolDataConverter')
 const ObjStore = require('./helpers/objStore')
+const MockSocket = require('./helpers/mockSocket')
 const PluginPaymentChannel = require('..')
 
 const info = {
@@ -44,7 +49,7 @@ describe('Conditional Transfers', () => {
     const expiry = new Date()
     expiry.setSeconds(expiry.getSeconds() + 5)
 
-    this.transfer = {
+    this.transferJson = {
       id: uuid(),
       ledger: this.plugin.getInfo().prefix,
       from: this.plugin.getAccount(),
@@ -56,58 +61,90 @@ describe('Conditional Transfers', () => {
       executionCondition: this.condition,
       expiresAt: expiry.toISOString()
     }
+    const requestId = 12345
+    this.transfer = clpPacket.serializePrepare(
+      Object.assign({}, this.transferJson, {transferId: this.transferJson.id}),
+      requestId,
+      ilpAndCustomToProtocolData(this.transferJson)
+    )
 
-    this.incomingTransfer = Object.assign({}, this.transfer, {
+    this.clpFulfillment = clpPacket.serializeFulfill({
+      transferId: this.transferJson.id,
+      fulfillment: this.fulfillment
+    }, requestId + 1, [])
+
+    this.incomingTransferJson = Object.assign({}, this.transferJson, {
       from: peerAddress,
       to: this.plugin.getAccount()
     })
+    this.incomingTransfer = clpPacket.serializePrepare(
+      Object.assign({}, this.incomingTransferJson, {transferId: this.incomingTransferJson.id}),
+      requestId + 2,
+      ilpAndCustomToProtocolData(this.incomingTransferJson)
+    )
 
+    this.mockSocket = new MockSocket()
+    this.plugin.addSocket(this.mockSocket)
     yield this.plugin.connect()
   })
 
-  afterEach(function * () {
-    assert(nock.isDone(), 'nocks should all have been called')
+  afterEach(function () {
+    assert(this.mockSocket.isDone(), 'response handlers must be called')
   })
 
   describe('sendTransfer (conditional)', () => {
     it('allows an outgoing transfer to be fulfilled', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = clpPacket.deserialize(this.transfer)
+        assert.deepEqual(data, expectedPacket.data)
+        return clpPacket.serializeResponse(requestId, [])
+      })
 
       const sent = new Promise((resolve) => this.plugin.on('outgoing_prepare', resolve))
       const fulfilled = new Promise((resolve) => this.plugin.on('outgoing_fulfill', resolve))
 
-      yield this.plugin.sendTransfer(this.transfer)
+      yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin.receive('fulfill_condition', [this.transfer.id, this.fulfillment])
+      yield this.plugin.receive(this.mockSocket, this.clpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
     })
 
     it('fulfills an incoming transfer', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=fulfill_condition&prefix=example.red.', [this.transfer.id, this.fulfillment])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(clpPacket.TYPE_FULFILL, ({requestId, data}) => {
+          assert.equal(data.transferId, this.transferJson.id)
+          assert.equal(data.fulfillment, this.fulfillment)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       const fulfilled = new Promise((resolve) => this.plugin.on('incoming_fulfill', resolve))
 
-      yield this.plugin.receive('send_transfer', [this.incomingTransfer])
-      yield this.plugin.fulfillCondition(this.transfer.id, this.fulfillment)
+      yield this.plugin.receive(this.mockSocket, this.incomingTransfer)
+      yield this.plugin.fulfillCondition(this.transferJson.id, this.fulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '5', 'balance should increase by amount')
     })
 
     it('cancels an incoming transfer for too much money', function * () {
-      this.incomingTransfer.amount = 100
+      this.incomingTransferJson.amount = 100
+      this.incomingTransferJson.transferId = this.incomingTransferJson.id
+      const transfer = clpPacket.serializePrepare(
+        this.incomingTransferJson,
+        12345,
+        ilpAndCustomToProtocolData(this.incomingTransferJson)
+      )
 
       let incomingPrepared = false
       this.plugin.on('incoming_prepare', () => (incomingPrepared = true))
 
-      yield expect(this.plugin.receive('send_transfer', [this.incomingTransfer]))
+      this.mockSocket.reply(clpPacket.TYPE_RESPONSE)
+
+      yield expect(this.plugin.receive(this.mockSocket, transfer))
         .to.eventually.be.rejectedWith(/balanceIncomingFulfilledAndPrepared exceeds greatest allowed value/)
 
       assert.isFalse(incomingPrepared, 'incoming_prepare should not be emitted')
@@ -115,133 +152,166 @@ describe('Conditional Transfers', () => {
     })
 
     it('should fulfill a transfer even if inital RPC failed', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(500)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       const fulfilled = new Promise((resolve) => this.plugin.on('outgoing_fulfill', resolve))
       const sent = new Promise((resolve) => this.plugin.on('outgoing_prepare', resolve))
 
-      yield this.plugin.sendTransfer(this.transfer)
+      yield this.plugin.sendTransfer(this.transferJson)
       yield sent
-      yield this.plugin.receive('fulfill_condition', [this.transfer.id, this.fulfillment])
+      yield this.plugin.receive(this.mockSocket, this.clpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
     })
 
     it('doesn\'t fulfill a transfer with invalid fulfillment', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
-      yield this.plugin.sendTransfer(this.transfer)
-      yield expect(this.plugin.fulfillCondition(this.transfer.id, 'Garbage'))
+      yield this.plugin.sendTransfer(this.transferJson)
+      yield expect(this.plugin.fulfillCondition(this.transferJson.id, 'Garbage'))
         .to.eventually.be.rejected
     })
 
     it('doesn\'t fulfill an outgoing transfer', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
-      yield this.plugin.sendTransfer(this.transfer)
-      yield expect(this.plugin.fulfillCondition(this.transfer.id, this.fulfillment))
+      yield this.plugin.sendTransfer(this.transferJson)
+      yield expect(this.plugin.fulfillCondition(this.transferJson.id, this.fulfillment))
         .to.eventually.be.rejected
     })
 
     it('should not send a transfer with condition and no expiry', function () {
-      this.transfer.executionCondition = undefined
-      return expect(this.plugin.sendTransfer(this.transfer)).to.eventually.be.rejected
+      this.transferJson.executionCondition = undefined
+      return expect(this.plugin.sendTransfer(this.transferJson)).to.eventually.be.rejected
     })
 
     it('should not send a transfer with expiry and no condition', function () {
-      this.transfer.expiresAt = undefined
-      return expect(this.plugin.sendTransfer(this.transfer)).to.eventually.be.rejected
+      this.transferJson.expiresAt = undefined
+      return expect(this.plugin.sendTransfer(this.transferJson)).to.eventually.be.rejected
     })
 
     it('should resolve even if the event notification handler takes forever', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       this.plugin.on('outgoing_prepare', () => new Promise((resolve, reject) => {}))
 
-      yield this.plugin.sendTransfer(this.transfer)
+      yield this.plugin.sendTransfer(this.transferJson)
     })
 
     it('should resolve even if the event notification handler throws an error', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       this.plugin.on('outgoing_prepare', () => {
         throw new Error('blah')
       })
 
-      yield this.plugin.sendTransfer(this.transfer)
+      yield this.plugin.sendTransfer(this.transferJson)
     })
 
     it('should resolve even if the event notification handler rejects', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       this.plugin.on('outgoing_prepare', function * () {
         throw new Error('blah')
       })
 
-      yield this.plugin.sendTransfer(this.transfer)
+      yield this.plugin.sendTransfer(this.transferJson)
     })
   })
 
   describe('expireTransfer', () => {
     it('expires a transfer', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=expire_transfer&prefix=example.red.', [this.transfer.id])
-        .reply(200, true)
+      // TODO: define how expire_transfer should work with CLP. (cc: sharafian)
+      // Currently, the plugin sends back an empty CLP response. 
+      this.mockSocket.reply(clpPacket.TYPE_RESPONSE)
 
-      this.incomingTransfer.expiresAt = (new Date()).toISOString()
+      this.incomingTransferJson.expiresAt = (new Date()).toISOString()
+      this.incomingTransferJson.transferId = this.incomingTransferJson.id
+      const incomingTransfer = clpPacket.serializePrepare(
+        this.incomingTransferJson,
+        12345,
+        ilpAndCustomToProtocolData(this.incomingTransferJson)
+      )
+
       const cancel = new Promise((resolve) => this.plugin.on('incoming_cancel', resolve))
 
-      yield this.plugin.receive('send_transfer', [this.incomingTransfer])
+      yield this.plugin.receive(this.mockSocket, incomingTransfer)
       yield cancel
 
       assert.equal((yield this.plugin.getBalance()), '0', 'balance should not change')
     })
 
     it('expires an outgoing transfer', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=expire_transfer&prefix=example.red.', [this.transfer.id])
-        .reply(200, true)
+      this.transferJson.expiresAt = (new Date()).toISOString()
+      const expectedTransfer = clpPacket.serializePrepare(
+        Object.assign({}, this.transferJson, {transferId: this.transferJson.id}),
+        12345,
+        ilpAndCustomToProtocolData(this.transferJson)
+      )
 
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(expectedTransfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
-      this.transfer.expiresAt = (new Date()).toISOString()
       const cancel = new Promise((resolve) => this.plugin.on('outgoing_cancel', resolve))
 
-      yield this.plugin.sendTransfer(this.transfer)
+      yield this.plugin.sendTransfer(this.transferJson)
       yield cancel
 
       assert.equal((yield this.plugin.getBalance()), '0', 'balance should not change')
     })
 
     it('doesn\'t expire an executed transfer', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket
+        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = clpPacket.deserialize(this.transfer)
+          assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       const sent = new Promise((resolve) => this.plugin.on('outgoing_prepare', resolve))
       const fulfilled = new Promise((resolve) => this.plugin.on('outgoing_fulfill', resolve))
 
-      yield this.plugin.sendTransfer(this.transfer)
+      yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin.receive('fulfill_condition', [this.transfer.id, this.fulfillment])
+      yield this.plugin.receive(this.mockSocket, this.clpFulfillment)
       yield fulfilled
-      yield this.plugin._expireTransfer(this.transfer.id)
+      yield this.plugin._expireTransfer(this.transferJson.id)
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should not be rolled back')
     })
@@ -249,44 +319,96 @@ describe('Conditional Transfers', () => {
 
   describe('rejectIncomingTransfer', () => {
     it('rejects an incoming transfer', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=reject_incoming_transfer&prefix=example.red.', [this.transfer.id, 'reason'])
-        .reply(200, true)
+      const rejectionReasonStr = 'reason'
+      const expectedRejectionReason = {
+        code: 'F00',
+        name: 'Bad Request',
+        triggeredBy: 'example.red.server',
+        forwardedBy: [],
+        data: rejectionReasonStr
+      }
+
+      this.mockSocket
+        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(clpPacket.TYPE_REJECT, ({requestId, data}) => {
+          const ilpError = ilpPacket.deserializeIlpPacket(Buffer.from(data.rejectionReason,
+            'base64'))
+          delete ilpError.data.triggeredAt
+          assert.equal(data.transferId, this.transferJson.id)
+          assert.deepEqual(ilpError.data, expectedRejectionReason)
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       const rejected = new Promise((resolve) => this.plugin.on('incoming_reject', resolve))
 
-      yield this.plugin.receive('send_transfer', [this.incomingTransfer])
-      yield this.plugin.rejectIncomingTransfer(this.transfer.id, 'reason')
+      yield this.plugin.receive(this.mockSocket, this.incomingTransfer)
+      yield this.plugin.rejectIncomingTransfer(this.transferJson.id, rejectionReasonStr)
       yield rejected
 
       assert.equal((yield this.plugin.getBalance()), '0', 'balance should not change')
     })
 
     it('should allow an outgoing transfer to be rejected', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = clpPacket.deserialize(this.transfer)
+        assert.deepEqual(data, expectedPacket.data)
+        return clpPacket.serializeResponse(requestId, [])
+      })
+
+      const clpRejection = clpPacket.serializeReject({
+        transferId: this.transferJson.id,
+        rejectionReason: ilpPacket.serializeIlpError({
+          code: 'F00',
+          name: 'Bad Request',
+          triggeredBy: 'g.your.friendly.peer',
+          forwardedBy: [],
+          triggeredAt: new Date(),
+          data: 'reason'
+        })
+      }, 1111, [])
 
       const rejected = new Promise((resolve) => this.plugin.on('outgoing_reject', resolve))
 
-      yield this.plugin.sendTransfer(this.transfer)
-      yield this.plugin.receive('reject_incoming_transfer', [this.transfer.id, 'reason'])
+      yield this.plugin.sendTransfer(this.transferJson)
+
+      yield this.plugin.receive(this.mockSocket, clpRejection)
       yield rejected
     })
 
     it('should not reject an outgoing transfer', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_transfer&prefix=example.red.', [this.transfer])
-        .reply(200, true)
+      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = clpPacket.deserialize(this.transfer)
+        assert.deepEqual(data, expectedPacket.data)
+        return clpPacket.serializeResponse(requestId, [])
+      })
 
-      yield this.plugin.sendTransfer(this.transfer)
-      yield expect(this.plugin.rejectIncomingTransfer(this.transfer.id, 'reason'))
+      yield this.plugin.sendTransfer(this.transferJson)
+      yield expect(this.plugin.rejectIncomingTransfer(this.transferJson.id, 'reason'))
         .to.eventually.be.rejected
     })
 
     it('should not allow an incoming transfer to be rejected by sender', function * () {
-      yield this.plugin.receive('send_transfer', [this.incomingTransfer])
-      yield expect(this.plugin.receive('reject_transfer', [this.transfer.id, 'reason']))
+      this.mockSocket
+        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(clpPacket.TYPE_ERROR, (requestId, data) => {
+          // TODO: Once CLP Erros are defined, check the contents of the returned error (cc: sharafian)
+          // ...
+        })
+
+      yield this.plugin.receive(this.mockSocket, this.incomingTransfer)
+
+      const clpRejection = clpPacket.serializeReject({
+        transferId: this.transferJson.id,
+        rejectionReason: ilpPacket.serializeIlpError({
+          code: 'F00',
+          name: 'Bad Request',
+          triggeredBy: 'g.your.friendly.peer',
+          forwardedBy: [],
+          triggeredAt: new Date(),
+          data: 'reason'
+        })
+      }, 1111, [])
+      yield expect(this.plugin.receive(this.mockSocket, clpRejection))
         .to.eventually.be.rejected
     })
   })
