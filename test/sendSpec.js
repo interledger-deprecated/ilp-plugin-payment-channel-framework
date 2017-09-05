@@ -2,7 +2,6 @@
 
 const crypto = require('crypto')
 const uuid = require('uuid4')
-const request = require('superagent')
 const ilpPacket = require('ilp-packet')
 const clpPacket = require('clp-packet')
 const base64url = require('base64url')
@@ -176,7 +175,7 @@ describe('Send', () => {
 
       const clpMessage = clpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield this.plugin.receive(this.mockSocket, clpMessage)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, clpMessage)
 
       yield incoming
       yield outgoing
@@ -203,7 +202,7 @@ describe('Send', () => {
 
       const clpMessage = clpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield this.plugin.receive(this.mockSocket, clpMessage)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, clpMessage)
     })
 
     it('should throw an error if a handler is already registered', function * () {
@@ -227,7 +226,7 @@ describe('Send', () => {
 
       const clpMessage = clpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield expect(this.plugin.receive(this.mockSocket, clpMessage))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, clpMessage))
         .to.be.rejectedWith(/no request handler registered/)
     })
 
@@ -353,7 +352,7 @@ describe('Send', () => {
 
       this.mockSocket.reply(clpPacket.TYPE_RESPONSE)
 
-      yield this.plugin.receive(this.mockSocket, this.clpTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpTransfer)
       yield received
     })
 
@@ -377,8 +376,8 @@ describe('Send', () => {
       yield this.plugin.sendTransfer(this.transfer)
       yield this.plugin.sendTransfer(transfer2)
 
-      const send1 = this.plugin.receive(this.mockSocket, this.clpFulfillment)
-      const send2 = this.plugin.receive(this.mockSocket, fulfillment2)
+      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      const send2 = this.plugin._rpc.handleMessage(this.mockSocket, fulfillment2)
 
       yield Promise.all([ send1, send2 ])
       assert.equal(yield this.plugin.getBalance(), '-10',
@@ -399,8 +398,8 @@ describe('Send', () => {
       yield this.plugin.sendTransfer(this.transfer)
       yield this.plugin.sendTransfer(this.transfer)
 
-      const send1 = this.plugin.receive(this.mockSocket, this.clpFulfillment)
-      const send2 = this.plugin.receive(this.mockSocket, this.clpFulfillment)
+      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      const send2 = this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
         .catch((e) => {})
 
       yield Promise.all([ send1, send2 ])
@@ -522,7 +521,7 @@ describe('Send', () => {
         })
       })
 
-      assert.isTrue(yield this.plugin.receive('send_message', [this.message]))
+      assert.isTrue(yield this.plugin._rpc.handleMessage('send_message', [this.message]))
       yield incoming
     })
 

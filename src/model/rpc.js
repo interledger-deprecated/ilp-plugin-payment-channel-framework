@@ -66,7 +66,7 @@ module.exports = class ClpRpc extends EventEmitter {
     }
 
     try {
-      const result = await this.handlers[type].call(null, data)
+      const result = await this.handlers[type].call(null, {requestId, data})
       this.debug(`replying to request ${requestId} with ${JSON.stringify(result)}`)
       await _send(socket, clpPacket.serializeResponse(requestId, result || []))
     } catch (e) {
