@@ -62,7 +62,7 @@ module.exports = class ClpRpc extends EventEmitter {
         break
 
       default:
-        throw new Error(type + ' is not a valid clpPacket message type')
+        throw new Error(type + ' is not a valid clp packet type')
     }
 
     try {
