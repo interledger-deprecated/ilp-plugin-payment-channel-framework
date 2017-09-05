@@ -70,14 +70,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       })
     }
 
-    if (opts.rpcUris) {
-      // TODO: @sharafian. Can this branch be deleted? Can there be more than one RPC URI?
-      assertOptionType(opts, 'rpcUris', 'object')
-      this._rpcUris = opts.rpcUris
-    } else {
-      assertOptionType(opts, 'rpcUri', 'string')
-      this._rpcUris = [ opts.rpcUri ]
-    }
+    assertOptionType(opts, 'rpcUri', 'string')
+    this._rpcUri = opts.rpcUri
 
     this._connected = false
     this._requestHandler = null
@@ -85,7 +79,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
     // register RPC methods
     this._rpc = new ClpRpc({
-      rpcUri: this._rpcUris[0],
+      rpcUri: this._rpcUri,
       plugin: this,
       debug: this.debug,
       handlers: {
