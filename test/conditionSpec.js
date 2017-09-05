@@ -106,7 +106,7 @@ describe('Conditional Transfers', () => {
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin.receive(this.mockSocket, this.clpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
@@ -123,7 +123,7 @@ describe('Conditional Transfers', () => {
 
       const fulfilled = new Promise((resolve) => this.plugin.on('incoming_fulfill', resolve))
 
-      yield this.plugin.receive(this.mockSocket, this.incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
       yield this.plugin.fulfillCondition(this.transferJson.id, this.fulfillment)
       yield fulfilled
 
@@ -144,7 +144,7 @@ describe('Conditional Transfers', () => {
 
       this.mockSocket.reply(clpPacket.TYPE_RESPONSE)
 
-      yield expect(this.plugin.receive(this.mockSocket, transfer))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, transfer))
         .to.eventually.be.rejectedWith(/balanceIncomingFulfilledAndPrepared exceeds greatest allowed value/)
 
       assert.isFalse(incomingPrepared, 'incoming_prepare should not be emitted')
@@ -164,7 +164,7 @@ describe('Conditional Transfers', () => {
 
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
-      yield this.plugin.receive(this.mockSocket, this.clpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
@@ -266,7 +266,7 @@ describe('Conditional Transfers', () => {
 
       const cancel = new Promise((resolve) => this.plugin.on('incoming_cancel', resolve))
 
-      yield this.plugin.receive(this.mockSocket, incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, incomingTransfer)
       yield cancel
 
       assert.equal((yield this.plugin.getBalance()), '0', 'balance should not change')
@@ -309,7 +309,7 @@ describe('Conditional Transfers', () => {
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin.receive(this.mockSocket, this.clpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
       yield fulfilled
       yield this.plugin._expireTransfer(this.transferJson.id)
 
@@ -341,7 +341,7 @@ describe('Conditional Transfers', () => {
 
       const rejected = new Promise((resolve) => this.plugin.on('incoming_reject', resolve))
 
-      yield this.plugin.receive(this.mockSocket, this.incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
       yield this.plugin.rejectIncomingTransfer(this.transferJson.id, rejectionReasonStr)
       yield rejected
 
@@ -371,7 +371,7 @@ describe('Conditional Transfers', () => {
 
       yield this.plugin.sendTransfer(this.transferJson)
 
-      yield this.plugin.receive(this.mockSocket, clpRejection)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, clpRejection)
       yield rejected
     })
 
@@ -395,7 +395,7 @@ describe('Conditional Transfers', () => {
           // ...
         })
 
-      yield this.plugin.receive(this.mockSocket, this.incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
 
       const clpRejection = clpPacket.serializeReject({
         transferId: this.transferJson.id,
@@ -408,7 +408,7 @@ describe('Conditional Transfers', () => {
           data: 'reason'
         })
       }, 1111, [])
-      yield expect(this.plugin.receive(this.mockSocket, clpRejection))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, clpRejection))
         .to.eventually.be.rejected
     })
   })
