@@ -167,7 +167,7 @@ describe('makePaymentChannelPlugin', function () {
       this.transferJson.to = this.plugin.getAccount()
       const emitted = new Promise((resolve) => this.plugin.on('incoming_prepare', resolve))
 
-      this.plugin.receive(this.mockSocket, this.transfer)
+      this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
       await emitted
       assert.equal(called, true)
 
@@ -192,7 +192,7 @@ describe('makePaymentChannelPlugin', function () {
       this.mockSocket.reply(clpPacket.TYPE_ERROR)
 
       await assert.isRejected(
-        this.plugin.receive(this.mockSocket, this.transfer),
+        this.plugin._rpc.handleMessage(this.mockSocket, this.transfer),
         /^no$/)
 
       assert.equal(called, true)
@@ -226,7 +226,7 @@ describe('makePaymentChannelPlugin', function () {
 
       await this.plugin.sendTransfer(this.transferJson)
 
-      await this.plugin.receive(this.mockSocket, this.clpFulfillment)
+      await this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
 
       await called
       assert.equal(await this.plugin._transfers.getOutgoingFulfilled(), '5')
@@ -245,7 +245,7 @@ describe('makePaymentChannelPlugin', function () {
       }).reply(clpPacket.TYPE_RESPONSE)
 
       await this.plugin.sendTransfer(this.transferJson)
-      await this.plugin.receive(this.mockSocket, this.clpFulfillment)
+      await this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
 
       assert.equal(await this.plugin._transfers.getOutgoingFulfilled(), '5')
     })
@@ -280,7 +280,7 @@ describe('makePaymentChannelPlugin', function () {
       this.transfer.from = this.transfer.to
       this.transfer.to = this.plugin.getAccount()
 
-      await this.plugin.receive(this.mockSocket, this.transfer)
+      await this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
       await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
 
       await called
@@ -306,7 +306,7 @@ describe('makePaymentChannelPlugin', function () {
       this.transfer.from = this.transfer.to
       this.transfer.to = this.plugin.getAccount()
 
-      await this.plugin.receive(this.mockSocket, this.transfer)
+      await this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
       await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
     })
   })
