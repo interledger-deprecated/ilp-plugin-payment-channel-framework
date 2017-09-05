@@ -111,12 +111,12 @@ describe('Asymmetric plugin virtual', () => {
       }, requestId + 1, [])
     })
 
-    // TODO: assess whether this test case is necessary.
-    // There is a test with the same name in sendSpec.js
     it('should send a request', async function () {
       const response = {
         // TODO: CLP has no .to. Refactor code to take out .to, .from, and .ledger
-        // to: this.plugin.getAccount(), 
+        to: this.plugin.getAccount(),
+        from: this.plugin.getPeerAccount(),
+        ledger: this.plugin._prefix,
         ilp: base64url('some_base64_encoded_data_goes_here')
       }
 
@@ -149,7 +149,7 @@ describe('Asymmetric plugin virtual', () => {
       const fulfilled = new Promise((resolve) =>
         this.plugin.once('outgoing_fulfill', () => resolve()))
 
-      await this.plugin.receive(this.mockSocket, this.clpFulfillment)
+      await this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
       await fulfilled
     })
 
@@ -169,7 +169,7 @@ describe('Asymmetric plugin virtual', () => {
       const prepared = new Promise((resolve) =>
         this.plugin.once('incoming_prepare', () => resolve()))
 
-      await this.plugin.receive(this.mockSocket, this.transfer)
+      await this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
       await prepared
 
       const fulfilled = new Promise((resolve) =>

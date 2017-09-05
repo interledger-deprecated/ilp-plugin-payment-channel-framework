@@ -134,7 +134,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     this.addSocket = this._rpc.addSocket.bind(this._rpc)
-    this.receive = this._rpc.handleMessage.bind(this._rpc)
+    // this.receive = this._rpc.handleMessage.bind(this._rpc)
     this.isConnected = () => this._connected
     this.isAuthorized = (authToken) => (authToken === this._getAuthToken())
   }
@@ -228,26 +228,23 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
     const parsed = protocolDataToIlpAndCustom(clpResponse)
 
-    // TODO: decide what to do with legacy field .to (cc: @sharafian)
-    // Clp has no .to, .from, .ledger. Commenting message validation out for now
-    //
-    // parsed.to = 'example.red.client'
-    // this._validator.validateIncomingMessage(parsed)
+    parsed.to = this.getAccount()
+    parsed.from = this.getPeerAccount()
+    parsed.ledger = this._prefix
+    this._validator.validateIncomingMessage(parsed)
 
     this._safeEmit('incoming_response', parsed)
 
     return parsed
   }
 
-  async _handleRequest (_message) {
+  // async _handleRequest (_message) {
+  async _handleRequest ({requestId, data}) {
     const message = Object.assign({
-      // TODO: @sharafian we don't need the requestId here, do we?
-      // rpc.js takes care of matching requests and responses
-      // 
-      // id: _message.requestId, 
+      id: requestId,
       to: this.getAccount(),
       from: this.getPeerAccount()
-    }, protocolDataToIlpAndCustom(_message))
+    }, protocolDataToIlpAndCustom(data))
 
     // if there are side protocols only
     if (message.custom && !message.ilp) {
@@ -340,16 +337,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 
-  async _handleTransfer (_transfer) {
+  async _handleTransfer ({data}) {
     const transfer = Object.assign({
-      id: _transfer.id,
-      amount: _transfer.amount,
-      executionCondition: _transfer.executionCondition,
-      expiresAt: _transfer.expiresAt.toISOString(),
+      id: data.id,
+      amount: data.amount,
+      executionCondition: data.executionCondition,
+      expiresAt: data.expiresAt.toISOString(),
       to: this.getAccount(),
       from: this.getPeerAccount(),
       ledger: this._prefix
-    }, protocolDataToIlpAndCustom(_transfer))
+    }, protocolDataToIlpAndCustom(data))
 
     this._validator.validateIncomingTransfer(transfer)
     await this._transfers.prepare(transfer, true)
@@ -412,10 +409,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 
-  async _handleFulfillCondition ({ id, fulfillment }) {
-    const transferId = id // TODO: useless rewrite
+  // async _handleFulfillCondition ({ id, fulfillment }) {
+  async _handleFulfillCondition ({data}) {
+    const transferId = data.id // TODO: useless rewrite
 
-    this._validator.validateFulfillment(fulfillment)
+    this._validator.validateFulfillment(data.fulfillment)
     const transferInfo = await this._transfers.get(transferId)
 
     if (transferInfo.state === 'cancelled') {
@@ -432,9 +430,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         JSON.stringify(transferInfo))
     }
 
-    this._validateFulfillment(fulfillment, transferInfo.transfer.executionCondition)
-    await this._transfers.fulfill(transferId, fulfillment)
-    this._safeEmit('outgoing_fulfill', transferInfo.transfer, fulfillment)
+    this._validateFulfillment(data.fulfillment, transferInfo.transfer.executionCondition)
+    await this._transfers.fulfill(transferId, data.fulfillment)
+    this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment)
 
     try {
       await this._paychan.createOutgoingClaim(
@@ -480,8 +478,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       rejectionReason}, [])
   }
 
-  async _handleRejectIncomingTransfer ({ id, reason }) {
-    const transferId = id // TODO: useless rewrite
+  async _handleRejectIncomingTransfer ({data}) {
+    const transferId = data.id
 
     this.debug('handling rejection of ' + transferId)
     const transferInfo = await this._transfers.get(transferId)
@@ -496,10 +494,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     // TODO: add rejectionReason to interface
-    await this._transfers.cancel(transferId, reason)
+    await this._transfers.cancel(transferId, data.reason)
     this.debug('peer rejected ' + transferId)
 
-    this._safeEmit('outgoing_reject', transferInfo.transfer, reason)
+    this._safeEmit('outgoing_reject', transferInfo.transfer, data.reason)
   }
 
   async getBalance () {
