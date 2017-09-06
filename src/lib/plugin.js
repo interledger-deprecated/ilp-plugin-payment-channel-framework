@@ -238,7 +238,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     return parsed
   }
 
-  // async _handleRequest (_message) {
   async _handleRequest ({requestId, data}) {
     const message = Object.assign({
       id: requestId,
@@ -252,19 +251,19 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         return [{
           protocolName: 'get_info',
           contentType: Clp.MIME_APPLICATION_JSON,
-          data: JSON.stringify(this.getInfo())
+          data: Buffer.from(JSON.stringify(this.getInfo()))
         }]
       } else if (message.custom.get_balance) {
         return [{
           protocolName: 'get_balance',
           contentType: Clp.MIME_APPLICATION_JSON,
-          data: JSON.stringify(await this._handleGetBalance())
+          data: Buffer.from(JSON.stringify(await this._handleGetBalance()))
         }]
       } else if (message.custom.get_limit) {
         return [{
           protocolName: 'get_limit',
           contentType: Clp.MIME_APPLICATION_JSON,
-          data: JSON.stringify(await this._handleGetLimit())
+          data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
         }]
       } else {
         let custom = {}
@@ -396,20 +395,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       fulfillment}, protocolData
     )
 
-    // TODO: what to do if the peer does not send a claim back? (cc: sharafian)
     const {custom} = protocolDataToIlpAndCustom(result)
-    const claim = (custom && custom.claim) || ''
+    const claim = (custom && custom.claim) || {}
 
     try {
-      if (claim) {
-        await this._paychan.handleIncomingClaim(this._paychanContext, claim)
-      }
+      await this._paychan.handleIncomingClaim(this._paychanContext, claim)
     } catch (e) {
       this.debug('error handling incoming claim:', e)
     }
   }
 
-  // async _handleFulfillCondition ({ id, fulfillment }) {
   async _handleFulfillCondition ({data}) {
     const transferId = data.id // TODO: useless rewrite
 
@@ -434,17 +429,23 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.fulfill(transferId, data.fulfillment)
     this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment)
 
+    let result
     try {
-      await this._paychan.createOutgoingClaim(
+      result = await this._paychan.createOutgoingClaim(
         this._paychanContext,
         await this._transfers.getOutgoingFulfilled())
     } catch (e) {
       this.debug('error creating outgoing claim:', e)
     }
 
-    // return result === undefined ? true : result
+    return result === undefined ? [] : ilpAndCustomToProtocolData({
+      custom: {
+        claim: result
+      }
+    })
   }
 
+  // TODO: clarify the type of reason
   async rejectIncomingTransfer (transferId, reason) {
     this.assertConnectionBeforeCalling('rejectIncomingTransfer')
     this.debug('going to reject ' + transferId)
@@ -463,14 +464,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.cancel(transferId, reason)
     this.debug('rejected ' + transferId)
 
-    const rejectionReason = ilpPacket.serializeIlpError({
-      code: 'F00', // TODO: what should be the code? (cc: sharafian)
-      name: 'Bad Request', // TODO: what should be the name?   (cc: sharafian)
-      triggeredBy: this.getAccount(),
-      forwardedBy: [],
-      triggeredAt: new Date(),
-      data: reason
-    })
+    // const rejectionReason = ilpPacket.serializeIlpError({
+    //   code: 'F00', // TODO: what should be the code? (cc: sharafian)
+    //   name: 'Bad Request', // TODO: what should be the name?   (cc: sharafian)
+    //   triggeredBy: this.getAccount(),
+    //   forwardedBy: [],
+    //   triggeredAt: new Date(),
+    //   data: reason
+    // })
+
+    const rejectionReason = ilpPacket.serializeIlpError(reason)
 
     this._safeEmit('incoming_reject', transferInfo.transfer, reason)
     await this._rpc.reject({
@@ -585,24 +588,24 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async _handleGetLimit () {
+    // TODO: add unit test
     return this._transfers.getMaximum()
   }
 
   // TODO: @sharafian, assess wheter _stringNegate() is still needed.
   // This is no longer used by getLimit()
-  // _stringNegate (num) {
-  //   if (isNaN(+num)) {
-  //     throw new Error('invalid number: ' + num)
-  //   } else if (num.charAt(0) === '-') {
-  //     return num.substring(1)
-  //   } else {
-  //     return '-' + num
-  //   }
-  // }
+  _stringNegate (num) {
+    if (isNaN(+num)) {
+      throw new Error('invalid number: ' + num)
+    } else if (num.charAt(0) === '-') {
+      return num.substring(1)
+    } else {
+      return '-' + num
+    }
+  }
 
   async getLimit () {
     this.assertConnectionBeforeCalling('getLimit')
-    // rpc.call turns the balance into a number for some reason, so we turn it back to string
     const peerMaxBalance = await this._rpc.message({
       protocolData: [{
         protocolName: 'get_limit',
@@ -612,14 +615,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     })
     const { custom } = (protocolDataToIlpAndCustom(peerMaxBalance))
     if (custom && custom.get_limit) {
-      const limit = +custom.get_limit
-      // @sharafian: limit must be positive, correct?
-      if (isNaN(limit) || limit < 0) {
-        throw new Error('Peer limit must be a positive integer, but got: ' + limit)
-      }
-      // @sharafian: get_limit returns a number. Why turn it into string to negate it?
-      // return this._stringNegate(String(peerMaxBalance))
-      return limit * -1
+      return this._stringNegate(custom.get_limit)
     } else {
       throw new Error('Failed to get limit of peer.')
     }
