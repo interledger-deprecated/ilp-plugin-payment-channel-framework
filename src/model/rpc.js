@@ -167,10 +167,13 @@ module.exports = class ClpRpc extends EventEmitter {
   }
 
   async _connect () {
+    // This follows the:
+    // wss://${HOSTNAME}:${PORT}/${NAME}/${TOKEN}
+    // format outlined in https://github.com/interledger/interledger/wiki/Interledger-over-CLP
     // TODO: URL escape
     const ws = new WebSocket(this._rpcUri +
-      '?token=' + this._token +
-      '&prefix=' + this._plugin.getInfo().prefix)
+      '/' + this._plugin.getInfo().prefix
+      '/' + this._token)
 
     return new Promise((resolve) => {
       ws.on('open', () => resolve())
