@@ -168,7 +168,10 @@ module.exports = class ClpRpc extends EventEmitter {
 
   async _connect () {
     // TODO: URL escape
-    const ws = new WebSocket(this._rpcUri + '?token=' + this._token)
+    const ws = new WebSocket(this._rpcUri +
+      '?token=' + this._token +
+      '&prefix=' + this._plugin.getInfo().prefix)
+
     return new Promise((resolve) => {
       ws.on('open', () => resolve())
     })
