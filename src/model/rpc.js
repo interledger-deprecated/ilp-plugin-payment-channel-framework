@@ -38,6 +38,10 @@ module.exports = class ClpRpc extends EventEmitter {
     })
   }
 
+  setAuthToken (token) {
+    this._token = token
+  }
+
   async handleMessage (socket, message) {
     _assertSocket(socket)
     const {type, requestId, data} = clpPacket.deserialize(message)
@@ -163,7 +167,8 @@ module.exports = class ClpRpc extends EventEmitter {
   }
 
   async _connect () {
-    const ws = new WebSocket(this._rpcUri)
+    // TODO: URL escape
+    const ws = new WebSocket(this._rpcUri + '?token=' + this._token)
     return new Promise((resolve) => {
       ws.on('open', () => resolve())
     })
