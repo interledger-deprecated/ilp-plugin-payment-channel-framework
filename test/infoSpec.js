@@ -7,6 +7,8 @@ const assert = require('chai').assert
 const ObjStore = require('./helpers/objStore')
 const PluginPaymentChannel = require('..')
 const MockSocket = require('./helpers/mockSocket')
+const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+  require('../src/util/protocolDataConverter')
 
 const info = {
   prefix: 'example.red.',
@@ -34,8 +36,8 @@ describe('Info', () => {
     yield this.plugin.connect()
   })
 
-  afterEach(function * () {
-    assert(this.mockSocket.isDone(), 'request handlers must have been called')
+  afterEach(async function () {
+    assert(await this.mockSocket.isDone(), 'request handlers must have been called')
   })
 
   describe('getBalance', () => {
@@ -59,12 +61,27 @@ describe('Info', () => {
         return clpPacket.serializeResponse(requestId, [{
           protocolName: 'get_limit',
           contentType: clpPacket.MIME_APPLICATION_JSON,
-          data: Buffer.from('5')
+          data: Buffer.from('"5"')
         }])
       })
 
       // the value is reversed so it makes sense to our side
       assert.equal((yield this.plugin.getLimit()), '-5')
+    })
+
+    it('handles getLimit requests', function * () {
+      this.mockSocket.reply(clpPacket.TYPE_RESPONSE, ({requestId, data}) => {
+        const {custom} = protocolDataToIlpAndCustom(data)
+        assert(custom.get_limit)
+        assert(custom.get_limit, options.maxBalance)
+      })
+
+      const getLimitReq = clpPacket.serializeMessage(12345, [{
+        protocolName: 'get_limit',
+        contentType: clpPacket.MIME_APPLICATION_JSON,
+        data: Buffer.from('[]')
+      }])
+      this.mockSocket.emit('message', getLimitReq)
     })
   })
 

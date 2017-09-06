@@ -19,7 +19,7 @@ module.exports = class ClpRpc extends EventEmitter {
 
     super()
     this._sockets = []
-    this.handlers = handlers
+    this._handlers = handlers
     this._rpcUri = rpcUri
     this._plugin = plugin
     this.debug = debug
@@ -66,7 +66,7 @@ module.exports = class ClpRpc extends EventEmitter {
     }
 
     try {
-      const result = await this.handlers[type].call(null, {requestId, data})
+      const result = await this._handlers[type].call(null, {requestId, data})
       this.debug(`replying to request ${requestId} with ${JSON.stringify(result)}`)
       await _send(socket, clpPacket.serializeResponse(requestId, result || []))
     } catch (e) {
@@ -91,8 +91,9 @@ module.exports = class ClpRpc extends EventEmitter {
 
     await Promise.all(this._sockets.map(async (socket) => _send(socket, data)))
 
+    let callback
     const response = new Promise((resolve, reject) => {
-      this.once('_' + id, (type, data) => {
+      callback = (type, data) => {
         switch (type) {
           case clpPacket.TYPE_ACK:
           case clpPacket.TYPE_RESPONSE:
@@ -106,11 +107,13 @@ module.exports = class ClpRpc extends EventEmitter {
           default:
             throw new Error('Unkown CLP packet type', data)
         }
-      })
+      }
+      this.once('_' + id, callback)
     })
 
     const timeout = new Promise((resolve, reject) =>
       setTimeout(() => {
+        this.removeListener('_' + id, callback)
         reject(new Error(id + ' timed out'))
       }, DEFAULT_TIMEOUT))
 
@@ -195,7 +198,8 @@ async function _requestId () {
 }
 
 function _assertSocket (socket) {
-  if (typeof socket.send !== 'function') {
-    throw new TypeError(`Illegal argument.`)
+  if (typeof socket.send !== 'function' ||
+      typeof socket.on !== 'function') {
+    throw new TypeError(`Argument expected to be a socket object.`)
   }
 }
