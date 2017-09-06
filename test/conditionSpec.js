@@ -319,13 +319,13 @@ describe('Conditional Transfers', () => {
 
   describe('rejectIncomingTransfer', () => {
     it('rejects an incoming transfer', function * () {
-      const rejectionReasonStr = 'reason'
       const expectedRejectionReason = {
         code: 'F00',
         name: 'Bad Request',
         triggeredBy: 'example.red.server',
         forwardedBy: [],
-        data: rejectionReasonStr
+        triggeredAt: new Date(),
+        data: 'reason'
       }
 
       this.mockSocket
@@ -333,7 +333,6 @@ describe('Conditional Transfers', () => {
         .reply(clpPacket.TYPE_REJECT, ({requestId, data}) => {
           const ilpError = ilpPacket.deserializeIlpPacket(Buffer.from(data.rejectionReason,
             'base64'))
-          delete ilpError.data.triggeredAt
           assert.equal(data.transferId, this.transferJson.id)
           assert.deepEqual(ilpError.data, expectedRejectionReason)
           return clpPacket.serializeResponse(requestId, [])
@@ -342,7 +341,7 @@ describe('Conditional Transfers', () => {
       const rejected = new Promise((resolve) => this.plugin.on('incoming_reject', resolve))
 
       yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
-      yield this.plugin.rejectIncomingTransfer(this.transferJson.id, rejectionReasonStr)
+      yield this.plugin.rejectIncomingTransfer(this.transferJson.id, expectedRejectionReason)
       yield rejected
 
       assert.equal((yield this.plugin.getBalance()), '0', 'balance should not change')
