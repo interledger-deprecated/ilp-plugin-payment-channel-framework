@@ -215,6 +215,7 @@ describe('makePaymentChannelPlugin', function () {
             reject(e)
           }
           resolve()
+          return { foo: 'bar' }
         }
       })
 
