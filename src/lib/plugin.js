@@ -137,6 +137,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     // this.receive = this._rpc.handleMessage.bind(this._rpc)
     this.isConnected = () => this._connected
     this.isAuthorized = (authToken) => (authToken === this._getAuthToken())
+    this._rpc.setAuthToken(this._getAuthToken())
   }
 
   // don't throw errors even if the event handler throws
