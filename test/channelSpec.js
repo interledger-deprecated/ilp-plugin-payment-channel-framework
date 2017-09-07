@@ -12,7 +12,7 @@ const assert = chai.assert
 const ObjStore = require('./helpers/objStore')
 const MockSocket = require('./helpers/mockSocket')
 const makePaymentChannelPlugin = require('..').makePaymentChannelPlugin
-const { ilpAndCustomToProtocolData } =
+const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
   require('../src/util/protocolDataConverter')
 
 describe('makePaymentChannelPlugin', function () {
@@ -41,6 +41,11 @@ describe('makePaymentChannelPlugin', function () {
 
     this.channel = {
       pluginName: 'dummy',
+      constructor: (ctx, opts) => {
+        ctx.rpc.addMethod('echo-protocol', function (str) {
+          return str + ' back'
+        })
+      },
       connect: () => Promise.resolve(),
       disconnect: () => Promise.resolve(),
       handleIncomingPrepare: () => Promise.resolve(),
@@ -306,6 +311,23 @@ describe('makePaymentChannelPlugin', function () {
 
       await this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
       await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
+    })
+  })
+
+  describe('side-protocols', function () {
+    it('should handle custom side-protocols in a CLP message', function * () {
+      this.mockSocket.reply(clpPacket.TYPE_RESPONSE, ({data}) => {
+        const {custom} = protocolDataToIlpAndCustom(data)
+        assert(custom)
+        assert.equal(custom['echo-protocol'], 'hello there back')
+      })
+
+      const clpMessage = clpPacket.serializeMessage(12345, [{
+        protocolName: 'echo-protocol',
+        contentType: clpPacket.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify('hello there'))
+      }])
+      this.plugin._rpc.handleMessage(this.mockSocket, clpMessage)
     })
   })
 })
