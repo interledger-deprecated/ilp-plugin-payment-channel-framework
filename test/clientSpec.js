@@ -12,7 +12,7 @@ const assert = chai.assert
 const getObjBackend = require('../src/util/backend')
 const MockSocket = require('./helpers/mockSocket')
 const PluginPaymentChannel = require('..')
-const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+const { ilpAndCustomToProtocolData } =
   require('../src/util/protocolDataConverter')
 
 const conditionPair = () => {
@@ -61,8 +61,8 @@ describe('Asymmetric plugin virtual', () => {
     yield this.plugin.connect()
   })
 
-  afterEach(function () {
-    assert(this.mockSocket.isDone(), 'response handlers must be called')
+  afterEach(async function () {
+    assert(await this.mockSocket.isDone(), 'response handlers must be called')
   })
 
   describe('setup', () => {
@@ -113,7 +113,6 @@ describe('Asymmetric plugin virtual', () => {
 
     it('should send a request', async function () {
       const response = {
-        // TODO: CLP has no .to. Refactor code to take out .to, .from, and .ledger
         to: this.plugin.getAccount(),
         from: this.plugin.getPeerAccount(),
         ledger: this.plugin._prefix,
@@ -154,7 +153,7 @@ describe('Asymmetric plugin virtual', () => {
     })
 
     it('should receive and fulfill a transfer', async function () {
-      this.transferJson.to = this.plugin.getAccount() // TODO: needed?
+      this.transferJson.to = this.plugin.getAccount()
 
       this.mockSocket
         .reply(clpPacket.TYPE_RESPONSE, ({requestId, data}) => {
@@ -251,8 +250,6 @@ describe('Asymmetric plugin virtual', () => {
         executionCondition: '8EhfVB4NBL3Bpa7PPqA0-LbJPg_xGyNnnRkBJ1oYLSU',
         expiresAt: new Date(Date.now() + 1000).toISOString()
       })
-
-      assert(this.mockSocket.isDone())
     })
   })
 })
