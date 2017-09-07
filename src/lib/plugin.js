@@ -207,6 +207,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validator.validateOutgoingMessage(message)
     this._safeEmit('outgoing_request', message)
 
+    this.debug('requesting with plugin', message)
     const clpResponse = await this._rpc.message({
       protocolData: ilpAndCustomToProtocolData(message)
     })

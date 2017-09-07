@@ -30,6 +30,7 @@ module.exports = class ClpRpc extends EventEmitter {
     this.debug('adding socket')
     this._sockets.push(socket)
     socket.on('message', async (message) => {
+      this.debug('got message:', Buffer.from(message).toString('hex'))
       try {
         await this.handleMessage(socket, message)
       } catch (err) {
@@ -90,9 +91,11 @@ module.exports = class ClpRpc extends EventEmitter {
 
   async _call (id, data) {
     if (!this._sockets.length) {
+      this.debug('connecting socket')
       await this._connect()
     }
 
+    this.debug('sending ', Buffer.from(data).toString('hex'))
     await Promise.all(this._sockets.map(async (socket) => _send(socket, data)))
 
     let callback
@@ -163,6 +166,7 @@ module.exports = class ClpRpc extends EventEmitter {
     const requestId = await _requestId()
     const messageRequest = clpPacket.serializeMessage(requestId, protocolData)
 
+    this.debug('send message:', messageRequest)
     return this._call(requestId, messageRequest)
   }
 
@@ -171,13 +175,19 @@ module.exports = class ClpRpc extends EventEmitter {
     // wss://${HOSTNAME}:${PORT}/${NAME}/${TOKEN}
     // format outlined in https://github.com/interledger/interledger/wiki/Interledger-over-CLP
     // TODO: URL escape
-    const ws = new WebSocket(this._rpcUri +
-      '/' + this._plugin.getInfo().prefix
-      '/' + this._token)
+    const uri = this._rpcUri +
+      '/' + this._plugin.getInfo().prefix +
+      '/' + this._token
+
+    this.debug('connecting to', uri)
+    const ws = new WebSocket(uri)
 
     return new Promise((resolve) => {
-      ws.on('open', () => resolve())
-    })
+      ws.on('open', () => {
+        this.addSocket(ws)
+        resolve()
+      })
+    }
   }
 
   disconnect () {
