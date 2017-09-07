@@ -86,31 +86,11 @@ describe('Send', () => {
       return expect(this.plugin._rpc.call('method', 'example.red.', []))
         .to.eventually.deep.equal({ a: 'b' })
     })
-
-    // TODO: reassess whether this test case is still necessary (cc: sharafian)
-    it.skip('should accept an object as a response', function () {
-      // nock('https://example.com')
-      //   .post('/rpc?method=method&prefix=example.red.', [])
-      //   .reply(200, {
-      //     a: {
-      //       b: 'c'
-      //     }
-      //   })
-
-      return expect(this.plugin._rpc.call('method', 'example.red.', []))
-        .to.eventually.deep.equal({
-          a: {
-            b: 'c'
-          }
-        })
-    })
   })
 
-  // TODO: define how sendRequest should work (cc: @sharafian)
   describe('sendRequest', () => {
     beforeEach(function * () {
       this.message = {
-        // TODO: from, to, ledger do not exist in CLP. Can these fields be removed? (@sharafian)
         from: this.plugin.getAccount(),
         to: peerAddress,
         ledger: this.plugin.getInfo().prefix,
@@ -121,7 +101,6 @@ describe('Send', () => {
       }
 
       this.response = {
-        // TODO: from, to, ledger do not exist in CLP. Can these fields be removed? (@sharafian)
         from: peerAddress,
         to: this.plugin.getAccount(),
         ledger: this.plugin.getInfo().prefix,
@@ -154,7 +133,6 @@ describe('Send', () => {
     })
 
     it('should respond to a request', function * () {
-      // TODO: reassess wheter .to and .from are still necessary
       this.response.to = this.message.from = peerAddress
       this.response.from = this.message.to = this.plugin.getAccount()
 
@@ -182,7 +160,6 @@ describe('Send', () => {
     })
 
     it('should return an ILP error if the request handler errors', function * () {
-      // TODO: reassess wheter .to and .from are still necessary
       this.response.to = this.message.from = peerAddress
       this.response.from = this.message.to = this.plugin.getAccount()
 
@@ -472,82 +449,6 @@ describe('Send', () => {
     it('should not send a transfer with negative amount', function () {
       this.transfer.amount = '-5.0'
       return expect(this.plugin.sendTransfer(this.transfer)).to.eventually.be.rejected
-    })
-  })
-
-  // TODO: @sharafian, do we still need these tests? We removed sendMessage()
-  // from plugin.js
-  describe.skip('sendMessage (legacy)', () => {
-    beforeEach(function * () {
-      this.message = {
-        from: this.plugin.getAccount(),
-        to: peerAddress,
-        ledger: this.plugin.getInfo().prefix,
-        data: {
-          field: 'some stuff'
-        }
-      }
-    })
-
-    it('should send a message', function * () {
-      nock('https://example.com')
-        .post('/rpc?method=send_message&prefix=example.red.', [this.message])
-        .reply(200, true)
-
-      // this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId, data}) => {
-      //   return clpPacket.serializeResponse(requestId, [])
-      // })
-
-      const outgoing = new Promise((resolve) => this.plugin.on('outgoing_message', resolve))
-      yield this.plugin.sendMessage(this.message)
-      yield outgoing
-    })
-
-    it('should receive a message', function * () {
-      this.message.from = peerAddress
-      this.message.to = this.plugin.getAccount()
-      this.message.account = this.plugin.getAccount()
-
-      const incoming = new Promise((resolve, reject) => {
-        this.plugin.on('incoming_message', (message) => {
-          try {
-            assert.deepEqual(message, Object.assign({},
-              this.message,
-              { account: peerAddress }))
-            resolve()
-          } catch (e) {
-            reject(e)
-          }
-        })
-      })
-
-      assert.isTrue(yield this.plugin._rpc.handleMessage('send_message', [this.message]))
-      yield incoming
-    })
-
-    it('should throw an error on no response', function () {
-      this.timeout(3000)
-      return expect(this.plugin.sendMessage(this.message)).to.eventually.be.rejected
-    })
-
-    it('should not send without an account or to-from', function () {
-      this.message.account = undefined
-      return expect(this.plugin.sendMessage(this.message)).to.eventually.be.rejected
-    })
-
-    it('should not send with incorrect ledger', function () {
-      this.message.ledger = 'bogus'
-      return expect(this.plugin.sendMessage(this.message)).to.eventually.be.rejected
-    })
-
-    it('should not send with missing ledger', function () {
-      this.message.ledger = undefined
-      return expect(this.plugin.sendMessage(this.message)).to.eventually.be.rejected
-    })
-
-    it('should not send without any data', function () {
-      this.message.data = undefined
-      return expect(this.plugin.sendMessage(this.message)).to.eventually.be.rejected
     })
   })
 })
