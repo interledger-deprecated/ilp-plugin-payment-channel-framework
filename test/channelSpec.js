@@ -12,7 +12,7 @@ const assert = chai.assert
 const ObjStore = require('./helpers/objStore')
 const MockSocket = require('./helpers/mockSocket')
 const makePaymentChannelPlugin = require('..').makePaymentChannelPlugin
-const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+const { ilpAndCustomToProtocolData } =
   require('../src/util/protocolDataConverter')
 
 describe('makePaymentChannelPlugin', function () {
@@ -43,9 +43,7 @@ describe('makePaymentChannelPlugin', function () {
       pluginName: 'dummy',
       connect: () => Promise.resolve(),
       disconnect: () => Promise.resolve(),
-      handleIncomingPrepare: () => {
-        Promise.resolve()
-      },
+      handleIncomingPrepare: () => Promise.resolve(),
       createOutgoingClaim: () => Promise.resolve(),
       handleIncomingClaim: () => Promise.resolve(),
       getInfo: () => this.info,
