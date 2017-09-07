@@ -2,12 +2,11 @@
 
 const clpPacket = require('clp-packet')
 const assert = require('chai').assert
-// const nock = require('nock')
 
 const ObjStore = require('./helpers/objStore')
 const PluginPaymentChannel = require('..')
 const MockSocket = require('./helpers/mockSocket')
-const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+const { protocolDataToIlpAndCustom } =
   require('../src/util/protocolDataConverter')
 
 const info = {

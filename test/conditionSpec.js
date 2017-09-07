@@ -1,6 +1,5 @@
 'use strict'
 
-// const nock = require('nock')
 const uuid = require('uuid4')
 const crypto = require('crypto')
 const base64url = require('base64url')
@@ -12,7 +11,7 @@ const expect = chai.expect
 const clpPacket = require('clp-packet')
 const ilpPacket = require('ilp-packet')
 
-const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+const { ilpAndCustomToProtocolData } =
   require('../src/util/protocolDataConverter')
 const ObjStore = require('./helpers/objStore')
 const MockSocket = require('./helpers/mockSocket')
@@ -88,8 +87,8 @@ describe('Conditional Transfers', () => {
     yield this.plugin.connect()
   })
 
-  afterEach(function () {
-    assert(this.mockSocket.isDone(), 'response handlers must be called')
+  afterEach(function * () {
+    assert(yield this.mockSocket.isDone(), 'response handlers must be called')
   })
 
   describe('sendTransfer (conditional)', () => {
@@ -142,7 +141,9 @@ describe('Conditional Transfers', () => {
       let incomingPrepared = false
       this.plugin.on('incoming_prepare', () => (incomingPrepared = true))
 
-      this.mockSocket.reply(clpPacket.TYPE_RESPONSE)
+      this.mockSocket.reply(clpPacket.TYPE_ERROR, ({requestId, data}) => {
+        // TODO: assert data contains the expected rejection reason
+      })
 
       yield expect(this.plugin._rpc.handleMessage(this.mockSocket, transfer))
         .to.eventually.be.rejectedWith(/balanceIncomingFulfilledAndPrepared exceeds greatest allowed value/)

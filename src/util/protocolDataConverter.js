@@ -2,7 +2,6 @@
 
 const Clp = require('clp-packet')
 const base64url = require('base64url')
-// const base64url = require('base64url-adhoc')
 
 function protocolDataToIlpAndCustom ({ protocolData }) {
   const ret = {}
