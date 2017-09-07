@@ -250,19 +250,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
           data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
         }]
       } else {
-        // let custom = {}
-        // for (const key of Object.keys(message.custom)) {
-        //   const handler = this._sideProtoHandler[key]
-        //   if (!handler) {
-        //     this.debug(`received message for protocol "${key}", ` +
-        //       'but no protocol handler is registers')
-        //     // TODO: handle if side protocol is not supported
-        //   } else {
-        //     custom[key] = handler(message)
-        //   }
-        // }
-        // return ilpAndCustomToProtocolData({custom})
-        throw new Error('Unsupported side protocol.')
+        if (this._paychanContext.rpc.handleProtocols) {
+          return this._paychanContext.rpc.handleProtocols(message.custom)
+        } else {
+          throw new Error('Unsupported side protocol.')
+        }
       }
     }
 
