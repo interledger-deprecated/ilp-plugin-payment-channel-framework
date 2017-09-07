@@ -150,22 +150,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 
-  registerSideProtocolHandler (protocol, handler) {
-    if (typeof protocol !== 'string') {
-      throw new Error('Protocol must be string')
-    }
-    if (this._sideProtoHandler[protocol]) {
-      throw new RequestHandlerAlreadyRegisteredError(`requestHandler for ${protocol}` +
-       ' is already registered')
-    }
-
-    if (typeof handler !== 'function') {
-      throw new InvalidFieldsError('requestHandler must be a function')
-    }
-
-    this._sideProtoHandler[protocol] = handler
-  }
-
   // TODO: This function should be depcrecated from RFC-0004. Instead we should
   // use registerSideProtocolHandler. (@sharafian)
   registerRequestHandler (handler) {
@@ -266,18 +250,19 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
           data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
         }]
       } else {
-        let custom = {}
-        for (const key of Object.keys(message.custom)) {
-          const handler = this._sideProtoHandler[key]
-          if (!handler) {
-            this.debug(`received message for protocol "${key}", ` +
-              'but no protocol handler is registers')
-            // TODO: handle if side protocol is not supported
-          } else {
-            custom[key] = handler(message)
-          }
-        }
-        return ilpAndCustomToProtocolData({custom})
+        // let custom = {}
+        // for (const key of Object.keys(message.custom)) {
+        //   const handler = this._sideProtoHandler[key]
+        //   if (!handler) {
+        //     this.debug(`received message for protocol "${key}", ` +
+        //       'but no protocol handler is registers')
+        //     // TODO: handle if side protocol is not supported
+        //   } else {
+        //     custom[key] = handler(message)
+        //   }
+        // }
+        // return ilpAndCustomToProtocolData({custom})
+        throw new Error('Unsupported side protocol.')
       }
     }
 
@@ -592,8 +577,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     return this._transfers.getMaximum()
   }
 
-  // TODO: @sharafian, assess wheter _stringNegate() is still needed.
-  // This is no longer used by getLimit()
   _stringNegate (num) {
     if (isNaN(+num)) {
       throw new Error('invalid number: ' + num)
@@ -637,7 +620,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       throw new Error('Could not get peer balance.')
     }
 
-    return String(balance * -1)
+    return this._stringNegate(balance)
   }
 
   _validateFulfillment (fulfillment, condition) {
