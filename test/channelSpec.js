@@ -257,7 +257,6 @@ describe('makePaymentChannelPlugin', function () {
           try {
             assert.deepEqual(ctx.state, {})
             assert.equal(ctx.plugin, this.plugin)
-            // TODO: Decide on the claim side-protocol
             assert.deepEqual(claim, { foo: 'bar' })
           } catch (e) {
             reject(e)
