@@ -60,7 +60,7 @@ describe('Info', () => {
         return clpPacket.serializeResponse(requestId, [{
           protocolName: 'get_limit',
           contentType: clpPacket.MIME_APPLICATION_JSON,
-          data: Buffer.from('"5"')
+          data: Buffer.from(JSON.stringify('5'))
         }])
       })
 
@@ -99,7 +99,7 @@ describe('Info', () => {
         return clpPacket.serializeResponse(requestId, [{
           protocolName: 'get_balance',
           contentType: clpPacket.MIME_APPLICATION_JSON,
-          data: Buffer.from('5')
+          data: Buffer.from(JSON.stringify('5'))
         }])
       })
 
