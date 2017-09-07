@@ -75,7 +75,7 @@ describe('Asymmetric plugin virtual', () => {
         return clpPacket.serializeResponse(requestId, [{
           protocolName: 'get_balance',
           contentType: clpPacket.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(-5))
+          data: Buffer.from(JSON.stringify('-5'))
         }])
       })
 
