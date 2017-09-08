@@ -30,7 +30,7 @@ module.exports = class CustomRpc {
     for (const protocol of Object.keys(custom)) {
       // TODO: define custom error code for unsupported side protocol
       if (!this._methods[protocol]) throw new Error('Unrecognized side protocol: ' + protocol)
-      const response = await this._methods[protocol].call(this._that, custom[protocol])
+      const response = await this._methods[protocol].call(this, custom[protocol])
 
       responseProtocolData.push({
         protocolName: protocol,
