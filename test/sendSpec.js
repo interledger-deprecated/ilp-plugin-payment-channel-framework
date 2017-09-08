@@ -292,24 +292,17 @@ describe('Send', () => {
       // })
     })
 
-    it.skip('should roll back a transfer if the RPC call fails', async function () {
+    it('should roll back a transfer if the RPC call fails', function * () {
       this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
         return clpPacket.serializeError({rejectionReason: this.ilpError},
           requestId, [])
       })
 
-      try {
-        // TODO: @sharafian, this test case seems to not have worked as intended,
-        // because sendTransfer did not throw. Any reason why sendTransfer only
-        // throws if the plugin is stateful?
-        await this.plugin.sendTransfer(this.transfer)
-        assert.fail('should throw')
-      } catch (err) {
-        assert.match(err.message, /Unexpected status code 500/)
-      }
-      // TODO: At the moment, the balance is not update indepently if the RPC call
-      // fails or not (see test case 'should send a transfer')
-      assert.equal((await this.plugin.getBalance()), '0', 'balance should be rolled back')
+      const rejectionReason = base64url.encode(this.ilpError)
+      yield expect(this.plugin.sendTransfer(this.transfer))
+        .to.eventually.be.rejectedWith(rejectionReason)
+
+      assert.equal((yield this.plugin.getBalance()), '0', 'balance should be rolled back')
     })
 
     it('should receive a transfer', function * () {

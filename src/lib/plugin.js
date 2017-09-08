@@ -297,14 +297,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
     try {
       await this._rpc.prepare(transfer, ilpAndCustomToProtocolData(transfer))
-
       this.debug('transfer acknowledged ' + transfer.id)
     } catch (e) {
-      this.debug(e)
       this.debug(e.name + ' during transfer ' + transfer.id)
-      if (!this._stateful) {
-        throw e
-      }
+      throw e
     }
 
     this._safeEmit('outgoing_prepare', transfer)
