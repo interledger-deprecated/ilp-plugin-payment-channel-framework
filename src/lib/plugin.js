@@ -171,13 +171,13 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async connect () {
     if (!this._stateful) {
-      const clpResponse = await this._rpc.message({
-        protocolData: [{
+      const clpResponse = await this._rpc.message(
+        [{
           protocolName: 'get_info',
           contentType: Clp.MIME_APPLICATION_JSON,
           data: Buffer.from('[]')
         }]
-      })
+      )
       const resp = protocolDataToIlpAndCustom(clpResponse)
       this._info = (resp.custom && resp.custom.get_info) || {}
     }
@@ -208,9 +208,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('outgoing_request', message)
 
     this.debug('requesting with plugin', message)
-    const clpResponse = await this._rpc.message({
-      protocolData: ilpAndCustomToProtocolData(message)
-    })
+    const clpResponse = await this._rpc.message(ilpAndCustomToProtocolData(message))
 
     const parsed = protocolDataToIlpAndCustom(clpResponse)
 
@@ -365,10 +363,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.fulfill(transferId, fulfillment)
     this._safeEmit('incoming_fulfill', transferInfo.transfer, fulfillment)
     const protocolData = []
-    const result = await this._rpc.fulfill({
-      id: transferId,
-      fulfillment}, protocolData
-    )
+    const result = await this._rpc.fulfill(transferId, fulfillment, protocolData)
 
     const {custom} = protocolDataToIlpAndCustom(result)
     const claim = (custom && custom.claim) || {}
@@ -451,9 +446,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const rejectionReason = ilpPacket.serializeIlpError(reason)
 
     this._safeEmit('incoming_reject', transferInfo.transfer, reason)
-    await this._rpc.reject({
-      id: transferId,
-      rejectionReason}, [])
+    await this._rpc.reject(transferId, rejectionReason, [])
   }
 
   async _handleRejectIncomingTransfer ({data}) {
@@ -523,18 +516,15 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       return
     }
 
-    await this._rpc.reject({
-      id: transferId,
-      reason: {
-        code: 'R00',
-        name: 'Transfer Timed Out',
-        triggeredBy: this.getAccount(),
-        forwardedBy: [],
-        triggeredAt: new Date(),
-        data: 'expired'
-      },
-      protocolData: []
-    }).catch(() => {})
+    const rejectionReason = {
+      code: 'R00',
+      name: 'Transfer Timed Out',
+      triggeredBy: this.getAccount(),
+      forwardedBy: [],
+      triggeredAt: new Date(),
+      data: 'expired'
+    }
+    await this._rpc.reject(transferId, rejectionReason, []).catch(() => {})
     this._safeEmit((transferInfo.isIncoming ? 'incoming' : 'outgoing') + '_cancel',
       transferInfo.transfer)
   }
@@ -579,13 +569,13 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async getLimit () {
     this.assertConnectionBeforeCalling('getLimit')
-    const peerMaxBalance = await this._rpc.message({
-      protocolData: [{
+    const peerMaxBalance = await this._rpc.message(
+      [{
         protocolName: 'get_limit',
         contentType: Clp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
-    })
+    )
     const { custom } = (protocolDataToIlpAndCustom(peerMaxBalance))
     if (custom && custom.get_limit) {
       return this._stringNegate(custom.get_limit)
@@ -596,13 +586,13 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async getPeerBalance () {
     this.assertConnectionBeforeCalling('getPeerBalance')
-    const clpResponse = await this._rpc.message({
-      protocolData: [{
+    const clpResponse = await this._rpc.message(
+      [{
         protocolName: 'get_balance',
         contentType: Clp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
-    })
+    )
 
     const parsed = protocolDataToIlpAndCustom(clpResponse)
     const balance = parsed && parsed.custom && parsed.custom.get_balance
