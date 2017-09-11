@@ -130,7 +130,8 @@ module.exports = class ClpRpc extends EventEmitter {
     ])
   }
 
-  async prepare ({id, amount, executionCondition, expiresAt}, protocolData) {
+  async prepare (transfer, protocolData) {
+    const {id, amount, executionCondition, expiresAt} = transfer
     const requestId = await _requestId()
     const prepareRequest = clpPacket.serializePrepare({
       transferId: id,
@@ -142,27 +143,28 @@ module.exports = class ClpRpc extends EventEmitter {
     return this._call(requestId, prepareRequest)
   }
 
-  async fulfill ({id, fulfillment}, protocolData) {
+  async fulfill (transferId, fulfillment, protocolData) {
     const requestId = await _requestId()
     const fulfillRequest = clpPacket.serializeFulfill({
-      transferId: id,
+      transferId,
       fulfillment
     }, requestId, protocolData)
 
     return this._call(requestId, fulfillRequest)
   }
 
-  async reject ({id, rejectionReason}, protocolData) {
+  async reject (transferId, rejectionReason, protocolData) {
     const requestId = await _requestId()
+    console.log('ASDFASDF', transferId)
     const rejectRequest = clpPacket.serializeReject({
-      transferId: id,
+      transferId,
       rejectionReason
     }, requestId, protocolData)
 
     return this._call(requestId, rejectRequest)
   }
 
-  async message ({ protocolData }) {
+  async message (protocolData) {
     const requestId = await _requestId()
     const messageRequest = clpPacket.serializeMessage(requestId, protocolData)
 
@@ -187,7 +189,7 @@ module.exports = class ClpRpc extends EventEmitter {
         this.addSocket(ws)
         resolve()
       })
-    }
+    })
   }
 
   disconnect () {
