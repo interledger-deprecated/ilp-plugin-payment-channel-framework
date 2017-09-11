@@ -253,9 +253,25 @@ describe('Conditional Transfers', () => {
 
   describe('expireTransfer', () => {
     it('expires a transfer', function * () {
-      // TODO: define how expire_transfer should work with CLP. (cc: sharafian)
-      // Currently, the plugin sends back an empty CLP response. 
-      this.mockSocket.reply(clpPacket.TYPE_RESPONSE)
+      this.mockSocket
+        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(clpPacket.TYPE_REJECT, ({requestId, data}) => {
+          assert.equal(data.transferId, this.incomingTransferJson.transferId)
+
+          // TODO: check that the correct CLP error is returned once they are defined
+          const reasonBuffer = Buffer.from(data.rejectionReason, 'base64')
+          const reason = ilpPacket.deserializeIlpPacket(reasonBuffer).data
+          delete reason.triggeredAt
+          assert.deepEqual(reason, {
+            code: 'R00',
+            name: 'Transfer Timed Out',
+            triggeredBy: this.plugin.getAccount(),
+            forwardedBy: [],
+            // triggeredAt: ...,
+            data: 'expired'
+          })
+          return clpPacket.serializeResponse(requestId, [])
+        })
 
       this.incomingTransferJson.expiresAt = (new Date()).toISOString()
       this.incomingTransferJson.transferId = this.incomingTransferJson.id
@@ -285,6 +301,23 @@ describe('Conditional Transfers', () => {
         .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
           const expectedPacket = clpPacket.deserialize(expectedTransfer)
           assert.deepEqual(data, expectedPacket.data)
+          return clpPacket.serializeResponse(requestId, [])
+        })
+        .reply(clpPacket.TYPE_REJECT, ({requestId, data}) => {
+          assert.equal(data.transferId, this.transferJson.id)
+
+          // TODO: check that the correct CLP error is returned once they are defined
+          const reasonBuffer = Buffer.from(data.rejectionReason, 'base64')
+          const reason = ilpPacket.deserializeIlpPacket(reasonBuffer).data
+          delete reason.triggeredAt
+          assert.deepEqual(reason, {
+            code: 'R00',
+            name: 'Transfer Timed Out',
+            triggeredBy: this.plugin.getAccount(),
+            forwardedBy: [],
+            // triggeredAt: ...,
+            data: 'expired'
+          })
           return clpPacket.serializeResponse(requestId, [])
         })
 
