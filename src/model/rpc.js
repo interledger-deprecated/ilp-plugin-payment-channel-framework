@@ -7,6 +7,29 @@ const crypto = require('crypto')
 
 // TODO: make it configurable
 const DEFAULT_TIMEOUT = 5000
+const namesToCodes = {
+  'UnreachableError': 'T00',
+  'NotAcceptedError': 'F00',
+  'InvalidFieldsError': 'F01',
+  'TransferNotFoundError': 'F02',
+  'InvalidFulfillmentError': 'F03',
+  'DuplicateIdError': 'F04',
+  'AlreadyRolledBackError': 'F05',
+  'AlreadyFulfilledError': 'F06',
+  'InsufficientBalanceError': 'F07'
+}
+
+function jsErrorToBtpError (e) {
+  const name = e.name || 'NotAcceptedError'
+  const code = namesToCodes[name] || 'F00'
+  
+  return {
+    code,
+    name,
+    triggeredAt: new Date(),
+    data: JSON.stringify({ message: e.message })
+  }
+}
 
 module.exports = class BtpRpc extends EventEmitter {
   constructor ({ rpcUri, plugin, handlers, debug }) {
@@ -75,15 +98,9 @@ module.exports = class BtpRpc extends EventEmitter {
       await _send(socket, btpPacket.serializeResponse(requestId, result || []))
     } catch (e) {
       this.debug(`Error calling message handler ${typeString}: `, e)
-      const ilp = ilpPacket.serializeIlpError({
-        code: 'F00',
-        name: 'Bad Request',
-        triggeredBy: this._plugin.getAccount(),
-        forwardedBy: [],
-        triggeredAt: new Date(),
-        data: JSON.stringify({ message: e.message })
-      })
-      await _send(socket, btpPacket.serializeError({rejectionReason: ilp}, requestId, []))
+      const error = jsErrorToBtpError(e)
+
+      await _send(socket, btpPacket.serializeError(error, requestId, []))
       throw e
     }
   }
