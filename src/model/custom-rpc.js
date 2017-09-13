@@ -1,17 +1,17 @@
-const Clp = require('clp-packet')
+const Btp = require('btp-packet')
 
 module.exports = class CustomRpc {
-  constructor ({ clpRpc }) {
-    this._clpRpc = clpRpc
+  constructor ({ btpRpc }) {
+    this._btpRpc = btpRpc
     this._methods = {}
   }
 
   // prefix argument is included for backwards-compatibility
   async call (method, prefix, args) {
-    const response = await this._clpRpc.message({
+    const response = await this._btpRpc.message({
       protocolData: [{
         protocolName: method,
-        contentType: Clp.MIME_APPLICATION_JSON,
+        contentType: Btp.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(args))
       }]
     })
@@ -34,7 +34,7 @@ module.exports = class CustomRpc {
 
       responseProtocolData.push({
         protocolName: protocol,
-        contentType: Clp.MIME_APPLICATION_JSON,
+        contentType: Btp.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(response))
       })
     }

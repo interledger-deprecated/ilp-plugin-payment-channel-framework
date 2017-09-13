@@ -1,6 +1,6 @@
 'use strict'
 
-const Clp = require('clp-packet')
+const Btp = require('btp-packet')
 const base64url = require('base64url')
 
 function protocolDataToIlpAndCustom ({ protocolData }) {
@@ -14,9 +14,9 @@ function protocolDataToIlpAndCustom ({ protocolData }) {
     }
 
     ret.custom = ret.custom || {}
-    if (protocol.contentType === Clp.MIME_TEXT_PLAIN_UTF8) {
+    if (protocol.contentType === Btp.MIME_TEXT_PLAIN_UTF8) {
       ret.custom[name] = protocol.data.toString('utf8')
-    } else if (protocol.contentType === Clp.MIME_APPLICATION_JSON) {
+    } else if (protocol.contentType === Btp.MIME_APPLICATION_JSON) {
       ret.custom[name] = JSON.parse(protocol.data.toString('utf8'))
     } else {
       ret.custom[name] = protocol.data
@@ -31,7 +31,7 @@ function ilpAndCustomToProtocolData ({ ilp, custom }) {
   if (ilp) {
     protocolData.push({
       protocolName: 'ilp',
-      contentType: Clp.MIME_APPLICATION_OCTET_STREAM,
+      contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
       data: Buffer.from(ilp, 'base64')
     })
   }
@@ -42,19 +42,19 @@ function ilpAndCustomToProtocolData ({ ilp, custom }) {
       if (Buffer.isBuffer(custom[protocol])) {
         protocolData.push({
           protocolName: protocol,
-          contentType: Clp.MIME_APPLICATION_OCTET_STREAM,
+          contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
           data: custom[protocol]
         })
       } else if (typeof custom[protocol] === 'string') {
         protocolData.push({
           protocolName: protocol,
-          contentType: Clp.MIME_TEXT_PLAIN_UTF8,
+          contentType: Btp.MIME_TEXT_PLAIN_UTF8,
           data: Buffer.from(custom[protocol])
         })
       } else {
         protocolData.push({
           protocolName: protocol,
-          contentType: Clp.MIME_APPLICATION_JSON,
+          contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(custom[protocol]))
         })
       }
