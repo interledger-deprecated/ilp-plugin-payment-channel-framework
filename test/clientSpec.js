@@ -2,7 +2,7 @@
 
 const crypto = require('crypto')
 const base64url = require('base64url')
-const clpPacket = require('clp-packet')
+const btpPacket = require('btp-packet')
 const ilpPacket = require('ilp-packet')
 
 const chai = require('chai')
@@ -46,10 +46,10 @@ const options = {
 describe('Asymmetric plugin virtual', () => {
   beforeEach(function * () {
     this.mockSocket = new MockSocket()
-    this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId}) => {
-      return clpPacket.serializeResponse(requestId, [{
+    this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId}) => {
+      return btpPacket.serializeResponse(requestId, [{
         protocolName: 'get_info',
-        contentType: clpPacket.MIME_APPLICATION_JSON,
+        contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(info))
       }])
     })
@@ -71,10 +71,10 @@ describe('Asymmetric plugin virtual', () => {
     })
 
     it('should get balance from peer', async function () {
-      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId}) => {
-        return clpPacket.serializeResponse(requestId, [{
+      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId}) => {
+        return btpPacket.serializeResponse(requestId, [{
           protocolName: 'get_balance',
-          contentType: clpPacket.MIME_APPLICATION_JSON,
+          contentType: btpPacket.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify('-5'))
         }])
       })
@@ -98,14 +98,14 @@ describe('Asymmetric plugin virtual', () => {
       }
       const requestId = 12345
 
-      this.transfer = clpPacket.serializePrepare(
+      this.transfer = btpPacket.serializePrepare(
         Object.assign({},
           this.transferJson,
           {transferId: this.transferJson.id}),
         requestId,
         ilpAndCustomToProtocolData(this.transferJson)
       )
-      this.clpFulfillment = clpPacket.serializeFulfill({
+      this.btpFulfillment = btpPacket.serializeFulfill({
         transferId: this.transferJson.id,
         fulfillment: this.fulfillment
       }, requestId + 1, [])
@@ -119,8 +119,8 @@ describe('Asymmetric plugin virtual', () => {
         ilp: base64url('some_base64_encoded_data_goes_here')
       }
 
-      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId}) => {
-        return clpPacket.serializeResponse(requestId,
+      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId}) => {
+        return btpPacket.serializeResponse(requestId,
           ilpAndCustomToProtocolData(response))
       })
 
@@ -133,10 +133,10 @@ describe('Asymmetric plugin virtual', () => {
     })
 
     it('should prepare and execute a transfer', async function () {
-      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-        const expectedPacket = clpPacket.deserialize(this.transfer)
+      this.mockSocket.reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = btpPacket.deserialize(this.transfer)
         assert.deepEqual(data, expectedPacket.data)
-        return clpPacket.serializeResponse(requestId, [])
+        return btpPacket.serializeResponse(requestId, [])
       })
 
       const prepared = new Promise((resolve) =>
@@ -148,7 +148,7 @@ describe('Asymmetric plugin virtual', () => {
       const fulfilled = new Promise((resolve) =>
         this.plugin.once('outgoing_fulfill', () => resolve()))
 
-      await this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      await this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
       await fulfilled
     })
 
@@ -156,13 +156,13 @@ describe('Asymmetric plugin virtual', () => {
       this.transferJson.to = this.plugin.getAccount()
 
       this.mockSocket
-        .reply(clpPacket.TYPE_RESPONSE, ({requestId, data}) => {
-          return clpPacket.serializeResponse(requestId, [])
+        .reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
+          return btpPacket.serializeResponse(requestId, [])
         })
-        .reply(clpPacket.TYPE_FULFILL, ({requestId, data}) => {
+        .reply(btpPacket.TYPE_FULFILL, ({requestId, data}) => {
           assert.equal(data.transferId, this.transferJson.id)
           assert.equal(data.fulfillment, this.fulfillment)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       const prepared = new Promise((resolve) =>
@@ -180,8 +180,8 @@ describe('Asymmetric plugin virtual', () => {
 
     it('should not send a transfer if peer gives error', async function () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
 
           const ilp = ilpPacket.serializeIlpError({
@@ -193,7 +193,7 @@ describe('Asymmetric plugin virtual', () => {
             data: JSON.stringify({ message: 'Peer isn\'t feeling like it.' })
           })
 
-          return clpPacket.serializeError({rejectionReason: ilp}, requestId, [])
+          return btpPacket.serializeError({rejectionReason: ilp}, requestId, [])
         })
 
       const prepared = new Promise((resolve, reject) => {
@@ -225,10 +225,10 @@ describe('Asymmetric plugin virtual', () => {
       ]
 
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
         // .reply(....)
 

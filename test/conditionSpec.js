@@ -8,7 +8,7 @@ const chai = require('chai')
 chai.use(require('chai-as-promised'))
 const assert = chai.assert
 const expect = chai.expect
-const clpPacket = require('clp-packet')
+const btpPacket = require('btp-packet')
 const ilpPacket = require('ilp-packet')
 
 const { ilpAndCustomToProtocolData } =
@@ -61,13 +61,13 @@ describe('Conditional Transfers', () => {
       expiresAt: expiry.toISOString()
     }
     const requestId = 12345
-    this.transfer = clpPacket.serializePrepare(
+    this.transfer = btpPacket.serializePrepare(
       Object.assign({}, this.transferJson, {transferId: this.transferJson.id}),
       requestId,
       ilpAndCustomToProtocolData(this.transferJson)
     )
 
-    this.clpFulfillment = clpPacket.serializeFulfill({
+    this.btpFulfillment = btpPacket.serializeFulfill({
       transferId: this.transferJson.id,
       fulfillment: this.fulfillment
     }, requestId + 1, [])
@@ -76,7 +76,7 @@ describe('Conditional Transfers', () => {
       from: peerAddress,
       to: this.plugin.getAccount()
     })
-    this.incomingTransfer = clpPacket.serializePrepare(
+    this.incomingTransfer = btpPacket.serializePrepare(
       Object.assign({}, this.incomingTransferJson, {transferId: this.incomingTransferJson.id}),
       requestId + 2,
       ilpAndCustomToProtocolData(this.incomingTransferJson)
@@ -93,10 +93,10 @@ describe('Conditional Transfers', () => {
 
   describe('sendTransfer (conditional)', () => {
     it('allows an outgoing transfer to be fulfilled', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-        const expectedPacket = clpPacket.deserialize(this.transfer)
+      this.mockSocket.reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = btpPacket.deserialize(this.transfer)
         assert.deepEqual(data, expectedPacket.data)
-        return clpPacket.serializeResponse(requestId, [])
+        return btpPacket.serializeResponse(requestId, [])
       })
 
       const sent = new Promise((resolve) => this.plugin.on('outgoing_prepare', resolve))
@@ -105,7 +105,7 @@ describe('Conditional Transfers', () => {
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
@@ -113,11 +113,11 @@ describe('Conditional Transfers', () => {
 
     it('fulfills an incoming transfer', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_RESPONSE)
-        .reply(clpPacket.TYPE_FULFILL, ({requestId, data}) => {
+        .reply(btpPacket.TYPE_RESPONSE)
+        .reply(btpPacket.TYPE_FULFILL, ({requestId, data}) => {
           assert.equal(data.transferId, this.transferJson.id)
           assert.equal(data.fulfillment, this.fulfillment)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       const fulfilled = new Promise((resolve) => this.plugin.on('incoming_fulfill', resolve))
@@ -132,7 +132,7 @@ describe('Conditional Transfers', () => {
     it('cancels an incoming transfer for too much money', function * () {
       this.incomingTransferJson.amount = 100
       this.incomingTransferJson.transferId = this.incomingTransferJson.id
-      const transfer = clpPacket.serializePrepare(
+      const transfer = btpPacket.serializePrepare(
         this.incomingTransferJson,
         12345,
         ilpAndCustomToProtocolData(this.incomingTransferJson)
@@ -141,7 +141,7 @@ describe('Conditional Transfers', () => {
       let incomingPrepared = false
       this.plugin.on('incoming_prepare', () => (incomingPrepared = true))
 
-      this.mockSocket.reply(clpPacket.TYPE_ERROR, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_ERROR, ({requestId, data}) => {
         // TODO: assert data contains the expected rejection reason
       })
 
@@ -154,10 +154,10 @@ describe('Conditional Transfers', () => {
 
     it('should fulfill a transfer even if inital RPC failed', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       const fulfilled = new Promise((resolve) => this.plugin.on('outgoing_fulfill', resolve))
@@ -165,7 +165,7 @@ describe('Conditional Transfers', () => {
 
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
@@ -173,10 +173,10 @@ describe('Conditional Transfers', () => {
 
     it('doesn\'t fulfill a transfer with invalid fulfillment', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       yield this.plugin.sendTransfer(this.transferJson)
@@ -186,10 +186,10 @@ describe('Conditional Transfers', () => {
 
     it('doesn\'t fulfill an outgoing transfer', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       yield this.plugin.sendTransfer(this.transferJson)
@@ -209,10 +209,10 @@ describe('Conditional Transfers', () => {
 
     it('should resolve even if the event notification handler takes forever', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       this.plugin.on('outgoing_prepare', () => new Promise((resolve, reject) => {}))
@@ -222,10 +222,10 @@ describe('Conditional Transfers', () => {
 
     it('should resolve even if the event notification handler throws an error', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       this.plugin.on('outgoing_prepare', () => {
@@ -237,10 +237,10 @@ describe('Conditional Transfers', () => {
 
     it('should resolve even if the event notification handler rejects', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       this.plugin.on('outgoing_prepare', function * () {
@@ -254,11 +254,11 @@ describe('Conditional Transfers', () => {
   describe('expireTransfer', () => {
     it('expires a transfer', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_RESPONSE)
-        .reply(clpPacket.TYPE_REJECT, ({requestId, data}) => {
+        .reply(btpPacket.TYPE_RESPONSE)
+        .reply(btpPacket.TYPE_REJECT, ({requestId, data}) => {
           assert.equal(data.transferId, this.incomingTransferJson.transferId)
 
-          // TODO: check that the correct CLP error is returned once they are defined
+          // TODO: check that the correct BTP error is returned once they are defined
           const reasonBuffer = Buffer.from(data.rejectionReason, 'base64')
           const reason = ilpPacket.deserializeIlpPacket(reasonBuffer).data
           delete reason.triggeredAt
@@ -270,12 +270,12 @@ describe('Conditional Transfers', () => {
             // triggeredAt: ...,
             data: 'expired'
           })
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       this.incomingTransferJson.expiresAt = (new Date()).toISOString()
       this.incomingTransferJson.transferId = this.incomingTransferJson.id
-      const incomingTransfer = clpPacket.serializePrepare(
+      const incomingTransfer = btpPacket.serializePrepare(
         this.incomingTransferJson,
         12345,
         ilpAndCustomToProtocolData(this.incomingTransferJson)
@@ -291,22 +291,22 @@ describe('Conditional Transfers', () => {
 
     it('expires an outgoing transfer', function * () {
       this.transferJson.expiresAt = (new Date()).toISOString()
-      const expectedTransfer = clpPacket.serializePrepare(
+      const expectedTransfer = btpPacket.serializePrepare(
         Object.assign({}, this.transferJson, {transferId: this.transferJson.id}),
         12345,
         ilpAndCustomToProtocolData(this.transferJson)
       )
 
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(expectedTransfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(expectedTransfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
-        .reply(clpPacket.TYPE_REJECT, ({requestId, data}) => {
+        .reply(btpPacket.TYPE_REJECT, ({requestId, data}) => {
           assert.equal(data.transferId, this.transferJson.id)
 
-          // TODO: check that the correct CLP error is returned once they are defined
+          // TODO: check that the correct BTP error is returned once they are defined
           const reasonBuffer = Buffer.from(data.rejectionReason, 'base64')
           const reason = ilpPacket.deserializeIlpPacket(reasonBuffer).data
           delete reason.triggeredAt
@@ -318,7 +318,7 @@ describe('Conditional Transfers', () => {
             // triggeredAt: ...,
             data: 'expired'
           })
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       const cancel = new Promise((resolve) => this.plugin.on('outgoing_cancel', resolve))
@@ -331,10 +331,10 @@ describe('Conditional Transfers', () => {
 
     it('doesn\'t expire an executed transfer', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          const expectedPacket = clpPacket.deserialize(this.transfer)
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       const sent = new Promise((resolve) => this.plugin.on('outgoing_prepare', resolve))
@@ -343,7 +343,7 @@ describe('Conditional Transfers', () => {
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
       yield fulfilled
       yield this.plugin._expireTransfer(this.transferJson.id)
 
@@ -363,13 +363,13 @@ describe('Conditional Transfers', () => {
       }
 
       this.mockSocket
-        .reply(clpPacket.TYPE_RESPONSE)
-        .reply(clpPacket.TYPE_REJECT, ({requestId, data}) => {
+        .reply(btpPacket.TYPE_RESPONSE)
+        .reply(btpPacket.TYPE_REJECT, ({requestId, data}) => {
           const ilpError = ilpPacket.deserializeIlpPacket(Buffer.from(data.rejectionReason,
             'base64'))
           assert.equal(data.transferId, this.transferJson.id)
           assert.deepEqual(ilpError.data, expectedRejectionReason)
-          return clpPacket.serializeResponse(requestId, [])
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       const rejected = new Promise((resolve) => this.plugin.on('incoming_reject', resolve))
@@ -382,13 +382,13 @@ describe('Conditional Transfers', () => {
     })
 
     it('should allow an outgoing transfer to be rejected', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-        const expectedPacket = clpPacket.deserialize(this.transfer)
+      this.mockSocket.reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = btpPacket.deserialize(this.transfer)
         assert.deepEqual(data, expectedPacket.data)
-        return clpPacket.serializeResponse(requestId, [])
+        return btpPacket.serializeResponse(requestId, [])
       })
 
-      const clpRejection = clpPacket.serializeReject({
+      const btpRejection = btpPacket.serializeReject({
         transferId: this.transferJson.id,
         rejectionReason: ilpPacket.serializeIlpError({
           code: 'F00',
@@ -404,15 +404,15 @@ describe('Conditional Transfers', () => {
 
       yield this.plugin.sendTransfer(this.transferJson)
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, clpRejection)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, btpRejection)
       yield rejected
     })
 
     it('should not reject an outgoing transfer', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-        const expectedPacket = clpPacket.deserialize(this.transfer)
+      this.mockSocket.reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        const expectedPacket = btpPacket.deserialize(this.transfer)
         assert.deepEqual(data, expectedPacket.data)
-        return clpPacket.serializeResponse(requestId, [])
+        return btpPacket.serializeResponse(requestId, [])
       })
 
       yield this.plugin.sendTransfer(this.transferJson)
@@ -422,15 +422,15 @@ describe('Conditional Transfers', () => {
 
     it('should not allow an incoming transfer to be rejected by sender', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_RESPONSE)
-        .reply(clpPacket.TYPE_ERROR, (requestId, data) => {
-          // TODO: Once CLP Erros are defined, check the contents of the returned error (cc: sharafian)
+        .reply(btpPacket.TYPE_RESPONSE)
+        .reply(btpPacket.TYPE_ERROR, (requestId, data) => {
+          // TODO: Once BTP Erros are defined, check the contents of the returned error (cc: sharafian)
           // ...
         })
 
       yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
 
-      const clpRejection = clpPacket.serializeReject({
+      const btpRejection = btpPacket.serializeReject({
         transferId: this.transferJson.id,
         rejectionReason: ilpPacket.serializeIlpError({
           code: 'F00',
@@ -441,7 +441,7 @@ describe('Conditional Transfers', () => {
           data: 'reason'
         })
       }, 1111, [])
-      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, clpRejection))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, btpRejection))
         .to.eventually.be.rejected
     })
   })

@@ -6,8 +6,8 @@ const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
 
-const Clp = require('clp-packet')
-const ClpRpc = require('../model/rpc')
+const Btp = require('btp-packet')
+const BtpRpc = require('../model/rpc')
 const CustomRpc = require('../model/custom-rpc')
 const Validator = require('../util/validator')
 const getBackend = require('../util/backend')
@@ -78,15 +78,15 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._sideProtoHandler = {}
 
     // register RPC methods
-    this._rpc = new ClpRpc({
+    this._rpc = new BtpRpc({
       rpcUri: this._rpcUri,
       plugin: this,
       debug: this.debug,
       handlers: {
-        [Clp.TYPE_PREPARE]: this._handleTransfer.bind(this),
-        [Clp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
-        [Clp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
-        [Clp.TYPE_MESSAGE]: this._handleRequest.bind(this)
+        [Btp.TYPE_PREPARE]: this._handleTransfer.bind(this),
+        [Btp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
+        [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
+        [Btp.TYPE_MESSAGE]: this._handleRequest.bind(this)
       }
     })
 
@@ -96,8 +96,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._paychan = paymentChannelBackend || {}
       this._paychanContext = {
         state: {},
-        rpc: new CustomRpc({ clpRpc: this._rpc }),
-        clpRpc: this._rpc,
+        rpc: new CustomRpc({ btpRpc: this._rpc }),
+        btpRpc: this._rpc,
         backend: this._backend,
         transferLog: this._transfers,
         plugin: this
@@ -171,14 +171,14 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async connect () {
     if (!this._stateful) {
-      const clpResponse = await this._rpc.message(
+      const btpResponse = await this._rpc.message(
         [{
           protocolName: 'get_info',
-          contentType: Clp.MIME_APPLICATION_JSON,
+          contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from('[]')
         }]
       )
-      const resp = protocolDataToIlpAndCustom(clpResponse)
+      const resp = protocolDataToIlpAndCustom(btpResponse)
       this._info = (resp.custom && resp.custom.get_info) || {}
     }
 
@@ -208,9 +208,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('outgoing_request', message)
 
     this.debug('requesting with plugin', message)
-    const clpResponse = await this._rpc.message(ilpAndCustomToProtocolData(message))
+    const btpResponse = await this._rpc.message(ilpAndCustomToProtocolData(message))
 
-    const parsed = protocolDataToIlpAndCustom(clpResponse)
+    const parsed = protocolDataToIlpAndCustom(btpResponse)
 
     parsed.to = this.getAccount()
     parsed.from = this.getPeerAccount()
@@ -234,19 +234,19 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       if (message.custom.get_info) {
         return [{
           protocolName: 'get_info',
-          contentType: Clp.MIME_APPLICATION_JSON,
+          contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(this.getInfo()))
         }]
       } else if (message.custom.get_balance) {
         return [{
           protocolName: 'get_balance',
-          contentType: Clp.MIME_APPLICATION_JSON,
+          contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(await this._handleGetBalance()))
         }]
       } else if (message.custom.get_limit) {
         return [{
           protocolName: 'get_limit',
-          contentType: Clp.MIME_APPLICATION_JSON,
+          contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
         }]
       } else {
@@ -572,7 +572,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const peerMaxBalance = await this._rpc.message(
       [{
         protocolName: 'get_limit',
-        contentType: Clp.MIME_APPLICATION_JSON,
+        contentType: Btp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
     )
@@ -586,15 +586,15 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async getPeerBalance () {
     this.assertConnectionBeforeCalling('getPeerBalance')
-    const clpResponse = await this._rpc.message(
+    const btpResponse = await this._rpc.message(
       [{
         protocolName: 'get_balance',
-        contentType: Clp.MIME_APPLICATION_JSON,
+        contentType: Btp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
     )
 
-    const parsed = protocolDataToIlpAndCustom(clpResponse)
+    const parsed = protocolDataToIlpAndCustom(btpResponse)
     const balance = parsed && parsed.custom && parsed.custom.get_balance
     if (!balance) {
       throw new Error('Could not get peer balance.')

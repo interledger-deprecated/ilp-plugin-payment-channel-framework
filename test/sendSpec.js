@@ -3,7 +3,7 @@
 const crypto = require('crypto')
 const uuid = require('uuid4')
 const ilpPacket = require('ilp-packet')
-const clpPacket = require('clp-packet')
+const btpPacket = require('btp-packet')
 const base64url = require('base64url')
 
 const sinon = require('sinon')
@@ -63,12 +63,12 @@ describe('Send', () => {
   describe('RPC', () => {
     it('should throw an error on an error code', function () {
       const expectedRequestId = 1234
-      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
         assert.equal(requestId, expectedRequestId)
-        return clpPacket.serializeError({rejectionReason: this.ilpError}, requestId, [])
+        return btpPacket.serializeError({rejectionReason: this.ilpError}, requestId, [])
       })
 
-      const cllpMessage = clpPacket.serializeMessage(expectedRequestId, [])
+      const cllpMessage = btpPacket.serializeMessage(expectedRequestId, [])
       return expect(this.plugin._rpc._call(expectedRequestId, cllpMessage))
         .to.eventually.be.rejected
     })
@@ -112,12 +112,12 @@ describe('Send', () => {
     })
 
     it('should send a request', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
         const {ilp, custom} = protocolDataToIlpAndCustom(data)
         assert.equal(ilp, this.message.ilp)
         assert.deepEqual(custom, this.message.custom)
 
-        return clpPacket.serializeResponse(requestId,
+        return btpPacket.serializeResponse(requestId,
           ilpAndCustomToProtocolData(this.response))
       })
 
@@ -142,7 +142,7 @@ describe('Send', () => {
         return Promise.resolve(this.response)
       })
 
-      this.mockSocket.reply(clpPacket.TYPE_RESPONSE, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
         const {ilp, custom} = protocolDataToIlpAndCustom(data)
         assert.equal(ilp, this.response.ilp)
         assert.deepEqual(custom, this.response.custom)
@@ -151,9 +151,9 @@ describe('Send', () => {
       const incoming = new Promise((resolve) => this.plugin.on('incoming_request', resolve))
       const outgoing = new Promise((resolve) => this.plugin.on('outgoing_response', resolve))
 
-      const clpMessage = clpPacket.serializeMessage(1111,
+      const btpMessage = btpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield this.plugin._rpc.handleMessage(this.mockSocket, clpMessage)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, btpMessage)
 
       yield incoming
       yield outgoing
@@ -167,7 +167,7 @@ describe('Send', () => {
         return Promise.reject(new Error('this is an error'))
       })
 
-      this.mockSocket.reply(clpPacket.TYPE_RESPONSE, ({data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({data}) => {
         const {ilp} = protocolDataToIlpAndCustom(data)
         const error = ilpPacket.deserializeIlpError(Buffer.from(ilp, 'base64'))
         assert.equal(error.code, 'F00')
@@ -177,9 +177,9 @@ describe('Send', () => {
         assert.deepEqual(JSON.parse(error.data), { message: 'this is an error' })
       })
 
-      const clpMessage = clpPacket.serializeMessage(1111,
+      const btpMessage = btpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield this.plugin._rpc.handleMessage(this.mockSocket, clpMessage)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, btpMessage)
     })
 
     it('should throw an error if a handler is already registered', function * () {
@@ -201,16 +201,16 @@ describe('Send', () => {
 
       this.plugin.deregisterRequestHandler()
 
-      const clpMessage = clpPacket.serializeMessage(1111,
+      const btpMessage = btpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, clpMessage))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, btpMessage))
         .to.be.rejectedWith(/no request handler registered/)
     })
 
     it('should throw an error on no response', function * () {
       const clock = sinon.useFakeTimers({ toFake: ['setTimeout'] })
 
-      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, () => {
+      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, () => {
         // sending no response back triggers a timeout on the sending side
         clock.tick(10000)
       })
@@ -253,19 +253,19 @@ describe('Send', () => {
           .digest())
       }
 
-      this.clpTransfer = clpPacket.serializePrepare(
+      this.btpTransfer = btpPacket.serializePrepare(
         Object.assign({}, this.transfer, {transferId: this.transfer.id}),
         12345, // requestId
         ilpAndCustomToProtocolData(this.transfer)
       )
-      this.clpFulfillment = clpPacket.serializeFulfill({
+      this.btpFulfillment = btpPacket.serializeFulfill({
         transferId: this.transfer.id,
         fulfillment: this.fulfillment
       }, 98765, [])
     })
 
     it('should send a transfer', async function () {
-      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
         assert.equal(data.transferId, this.transfer.id)
         assert.equal(data.amount, +this.transfer.amount)
         assert.equal(data.executionCondition, this.transfer.executionCondition)
@@ -274,7 +274,7 @@ describe('Send', () => {
         const {custom} = protocolDataToIlpAndCustom(data)
         assert.deepEqual(custom, this.transfer.custom)
 
-        return clpPacket.serializeResponse(requestId, [])
+        return btpPacket.serializeResponse(requestId, [])
       })
 
       const sent = new Promise((resolve) => this.plugin.on('outgoing_prepare', resolve))
@@ -293,8 +293,8 @@ describe('Send', () => {
     })
 
     it('should roll back a transfer if the RPC call fails', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-        return clpPacket.serializeError({rejectionReason: this.ilpError},
+      this.mockSocket.reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+        return btpPacket.serializeError({rejectionReason: this.ilpError},
           requestId, [])
       })
 
@@ -320,33 +320,33 @@ describe('Send', () => {
       this.transfer.from = peerAddress
       this.transfer.to = this.plugin.getAccount()
 
-      this.mockSocket.reply(clpPacket.TYPE_RESPONSE)
+      this.mockSocket.reply(btpPacket.TYPE_RESPONSE)
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.clpTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpTransfer)
       yield received
     })
 
     it('should not race when reading the balance', function * () {
       const transfer2 = Object.assign({}, this.transfer, { id: uuid() })
-      const fulfillment2 = clpPacket.serializeFulfill({
+      const fulfillment2 = btpPacket.serializeFulfill({
         transferId: transfer2.id,
         fulfillment: this.fulfillment
       }, 98765, [])
 
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          return clpPacket.serializeResponse(requestId, [])
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          return btpPacket.serializeResponse(requestId, [])
         })
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          return clpPacket.serializeResponse(requestId, [])
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          return btpPacket.serializeResponse(requestId, [])
         })
-        .reply(clpPacket.TYPE_RESPONSE)
-        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(btpPacket.TYPE_RESPONSE)
+        .reply(btpPacket.TYPE_RESPONSE)
 
       yield this.plugin.sendTransfer(this.transfer)
       yield this.plugin.sendTransfer(transfer2)
 
-      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
       const send2 = this.plugin._rpc.handleMessage(this.mockSocket, fulfillment2)
 
       yield Promise.all([ send1, send2 ])
@@ -356,20 +356,20 @@ describe('Send', () => {
 
     it('should not apply twice when two identical transfers come in with the same id', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          return clpPacket.serializeResponse(requestId, [])
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          return btpPacket.serializeResponse(requestId, [])
         })
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          return clpPacket.serializeResponse(requestId, [])
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          return btpPacket.serializeResponse(requestId, [])
         })
-        .reply(clpPacket.TYPE_ERROR)
-        .reply(clpPacket.TYPE_RESPONSE)
+        .reply(btpPacket.TYPE_ERROR)
+        .reply(btpPacket.TYPE_RESPONSE)
 
       yield this.plugin.sendTransfer(this.transfer)
       yield this.plugin.sendTransfer(this.transfer)
 
-      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
-      const send2 = this.plugin._rpc.handleMessage(this.mockSocket, this.clpFulfillment)
+      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      const send2 = this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
         .catch((e) => {})
 
       yield Promise.all([ send1, send2 ])
@@ -379,8 +379,8 @@ describe('Send', () => {
 
     it('should not race when two different transfers come in with the same id', function * () {
       this.mockSocket
-        .reply(clpPacket.TYPE_PREPARE, ({requestId, data}) => {
-          return clpPacket.serializeResponse(requestId, [])
+        .reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
+          return btpPacket.serializeResponse(requestId, [])
         })
 
       const transfer2 = Object.assign({}, this.transfer, { amount: '10' })
