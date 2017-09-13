@@ -1,7 +1,7 @@
 'use strict'
 
 const EventEmitter = require('events')
-const clp = require('clp-packet')
+const btp = require('btp-packet')
 
 const chai = require('chai')
 chai.use(require('chai-as-promised'))
@@ -19,7 +19,7 @@ class MockSocket extends EventEmitter {
       cb() // called because sending is finished
 
       setImmediate(() => { // emulates that receiving a response is asynchronous
-        const clpEnvelope = clp.deserialize(data)
+        const btpEnvelope = btp.deserialize(data)
         const handler = this.responses.shift()
 
         if (!handler) {
@@ -27,7 +27,7 @@ class MockSocket extends EventEmitter {
             'Add request handlers with mockSocket.reply().')
         }
         try {
-          const response = handler(clpEnvelope)
+          const response = handler(btpEnvelope)
           if (response) {
             this.emit('message', response)
           }
@@ -61,19 +61,19 @@ class MockSocket extends EventEmitter {
     if (typeof expectedType !== 'number') {
       throw new TypeError('expectedType must be number')
     }
-    const requiresReply = [clp.TYPE_PREPARE, clp.TYPE_FULFILL, clp.TYPE_REJECT,
-      clp.TYPE_MESSAGE].includes(expectedType)
+    const requiresReply = [btp.TYPE_PREPARE, btp.TYPE_FULFILL, btp.TYPE_REJECT,
+      btp.TYPE_MESSAGE].includes(expectedType)
     if (!fn && requiresReply) {
       throw new TypeError('no request handler provided')
     }
 
-    const handler = (clpEnvelope) => {
-      const actualType = clpEnvelope.type
+    const handler = (btpEnvelope) => {
+      const actualType = btpEnvelope.type
       assert.equal(actualType, expectedType,
-        `Received CLP packet of type ${actualType}, but expected ${expectedType}`)
+        `Received BTP packet of type ${actualType}, but expected ${expectedType}`)
 
       if (fn) {
-        return fn(clpEnvelope)
+        return fn(btpEnvelope)
       }
     }
 

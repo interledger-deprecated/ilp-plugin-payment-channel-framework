@@ -1,6 +1,6 @@
 'use strict'
 
-const clpPacket = require('clp-packet')
+const btpPacket = require('btp-packet')
 const assert = require('chai').assert
 
 const ObjStore = require('./helpers/objStore')
@@ -47,19 +47,19 @@ describe('Info', () => {
 
   describe('getLimit', () => {
     it('return the result of the RPC call', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
         const expectedGetLimitRequest = {
           protocolData: [{
             protocolName: 'get_limit',
-            contentType: clpPacket.MIME_APPLICATION_JSON,
+            contentType: btpPacket.MIME_APPLICATION_JSON,
             data: Buffer.from('[]')
           }]
         }
         assert.deepEqual(data, expectedGetLimitRequest)
 
-        return clpPacket.serializeResponse(requestId, [{
+        return btpPacket.serializeResponse(requestId, [{
           protocolName: 'get_limit',
-          contentType: clpPacket.MIME_APPLICATION_JSON,
+          contentType: btpPacket.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify('5'))
         }])
       })
@@ -69,15 +69,15 @@ describe('Info', () => {
     })
 
     it('handles getLimit requests', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_RESPONSE, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
         const {custom} = protocolDataToIlpAndCustom(data)
         assert(custom.get_limit)
         assert(custom.get_limit, options.maxBalance)
       })
 
-      const getLimitReq = clpPacket.serializeMessage(12345, [{
+      const getLimitReq = btpPacket.serializeMessage(12345, [{
         protocolName: 'get_limit',
-        contentType: clpPacket.MIME_APPLICATION_JSON,
+        contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }])
       this.mockSocket.emit('message', getLimitReq)
@@ -86,19 +86,19 @@ describe('Info', () => {
 
   describe('getPeerBalance', () => {
     it('return the result of the RPC call', function * () {
-      this.mockSocket.reply(clpPacket.TYPE_MESSAGE, ({requestId, data}) => {
+      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
         const expectedGetBalanceRequest = {
           protocolData: [{
             protocolName: 'get_balance',
-            contentType: clpPacket.MIME_APPLICATION_JSON,
+            contentType: btpPacket.MIME_APPLICATION_JSON,
             data: Buffer.from('[]')
           }]
         }
         assert.deepEqual(data, expectedGetBalanceRequest)
 
-        return clpPacket.serializeResponse(requestId, [{
+        return btpPacket.serializeResponse(requestId, [{
           protocolName: 'get_balance',
-          contentType: clpPacket.MIME_APPLICATION_JSON,
+          contentType: btpPacket.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify('5'))
         }])
       })

@@ -1,5 +1,5 @@
 const EventEmitter = require('events')
-const clpPacket = require('clp-packet')
+const btpPacket = require('btp-packet')
 const ilpPacket = require('ilp-packet')
 const WebSocket = require('ws')
 const assert = require('assert')
@@ -8,12 +8,12 @@ const crypto = require('crypto')
 // TODO: make it configurable
 const DEFAULT_TIMEOUT = 5000
 
-module.exports = class ClpRpc extends EventEmitter {
+module.exports = class BtpRpc extends EventEmitter {
   constructor ({ rpcUri, plugin, handlers, debug }) {
-    assert(typeof handlers[clpPacket.TYPE_PREPARE] === 'function', 'Prepare handler missing')
-    assert(typeof handlers[clpPacket.TYPE_FULFILL] === 'function', 'Fulfill handler missing')
-    assert(typeof handlers[clpPacket.TYPE_REJECT] === 'function', 'Reject handler missing')
-    assert(typeof handlers[clpPacket.TYPE_MESSAGE] === 'function', 'Message handler missing')
+    assert(typeof handlers[btpPacket.TYPE_PREPARE] === 'function', 'Prepare handler missing')
+    assert(typeof handlers[btpPacket.TYPE_FULFILL] === 'function', 'Fulfill handler missing')
+    assert(typeof handlers[btpPacket.TYPE_REJECT] === 'function', 'Reject handler missing')
+    assert(typeof handlers[btpPacket.TYPE_MESSAGE] === 'function', 'Message handler missing')
     assert(typeof rpcUri === 'string', 'rpcUri must be string')
     assert(typeof plugin === 'object', 'plugin must be provided')
 
@@ -45,35 +45,34 @@ module.exports = class ClpRpc extends EventEmitter {
 
   async handleMessage (socket, message) {
     _assertSocket(socket)
-    const {type, requestId, data} = clpPacket.deserialize(message)
-    const typeString = clpPacket.typeToString(type)
+    const {type, requestId, data} = btpPacket.deserialize(message)
+    const typeString = btpPacket.typeToString(type)
     if (data.transferId) {
       data.id = data.transferId
       delete data.transferId
     }
 
-    this.debug(`received CLP packet (${typeString}, RequestId: ${requestId}): ${JSON.stringify(data)}`)
+    this.debug(`received BTP packet (${typeString}, RequestId: ${requestId}): ${JSON.stringify(data)}`)
     switch (type) {
-      case clpPacket.TYPE_ACK:
-      case clpPacket.TYPE_RESPONSE:
-      case clpPacket.TYPE_ERROR:
+      case btpPacket.TYPE_RESPONSE:
+      case btpPacket.TYPE_ERROR:
         this.emit('_' + requestId, type, data)
         return
 
-      case clpPacket.TYPE_PREPARE:
-      case clpPacket.TYPE_FULFILL:
-      case clpPacket.TYPE_REJECT:
-      case clpPacket.TYPE_MESSAGE:
+      case btpPacket.TYPE_PREPARE:
+      case btpPacket.TYPE_FULFILL:
+      case btpPacket.TYPE_REJECT:
+      case btpPacket.TYPE_MESSAGE:
         break
 
       default:
-        throw new Error(type + ' is not a valid clp packet type')
+        throw new Error(type + ' is not a valid btp packet type')
     }
 
     try {
       const result = await this._handlers[type].call(null, {requestId, data})
       this.debug(`replying to request ${requestId} with ${JSON.stringify(result)}`)
-      await _send(socket, clpPacket.serializeResponse(requestId, result || []))
+      await _send(socket, btpPacket.serializeResponse(requestId, result || []))
     } catch (e) {
       this.debug(`Error calling message handler ${typeString}: `, e)
       const ilp = ilpPacket.serializeIlpError({
@@ -84,7 +83,7 @@ module.exports = class ClpRpc extends EventEmitter {
         triggeredAt: new Date(),
         data: JSON.stringify({ message: e.message })
       })
-      await _send(socket, clpPacket.serializeError({rejectionReason: ilp}, requestId, []))
+      await _send(socket, btpPacket.serializeError({rejectionReason: ilp}, requestId, []))
       throw e
     }
   }
@@ -102,17 +101,16 @@ module.exports = class ClpRpc extends EventEmitter {
     const response = new Promise((resolve, reject) => {
       callback = (type, data) => {
         switch (type) {
-          case clpPacket.TYPE_ACK:
-          case clpPacket.TYPE_RESPONSE:
+          case btpPacket.TYPE_RESPONSE:
             resolve(data)
             break
 
-          case clpPacket.TYPE_ERROR:
+          case btpPacket.TYPE_ERROR:
             reject(new Error(JSON.stringify(data)))
             break
 
           default:
-            throw new Error('Unkown CLP packet type', data)
+            throw new Error('Unkown BTP packet type', data)
         }
       }
       this.once('_' + id, callback)
@@ -133,7 +131,7 @@ module.exports = class ClpRpc extends EventEmitter {
   async prepare (transfer, protocolData) {
     const {id, amount, executionCondition, expiresAt} = transfer
     const requestId = await _requestId()
-    const prepareRequest = clpPacket.serializePrepare({
+    const prepareRequest = btpPacket.serializePrepare({
       transferId: id,
       amount,
       executionCondition,
@@ -145,7 +143,7 @@ module.exports = class ClpRpc extends EventEmitter {
 
   async fulfill (transferId, fulfillment, protocolData) {
     const requestId = await _requestId()
-    const fulfillRequest = clpPacket.serializeFulfill({
+    const fulfillRequest = btpPacket.serializeFulfill({
       transferId,
       fulfillment
     }, requestId, protocolData)
@@ -156,7 +154,7 @@ module.exports = class ClpRpc extends EventEmitter {
   async reject (transferId, rejectionReason, protocolData) {
     const requestId = await _requestId()
     console.log('ASDFASDF', transferId)
-    const rejectRequest = clpPacket.serializeReject({
+    const rejectRequest = btpPacket.serializeReject({
       transferId,
       rejectionReason
     }, requestId, protocolData)
@@ -166,7 +164,7 @@ module.exports = class ClpRpc extends EventEmitter {
 
   async message (protocolData) {
     const requestId = await _requestId()
-    const messageRequest = clpPacket.serializeMessage(requestId, protocolData)
+    const messageRequest = btpPacket.serializeMessage(requestId, protocolData)
 
     this.debug('send message:', messageRequest)
     return this._call(requestId, messageRequest)
@@ -175,7 +173,7 @@ module.exports = class ClpRpc extends EventEmitter {
   async _connect () {
     // This follows the:
     // wss://${HOSTNAME}:${PORT}/${NAME}/${TOKEN}
-    // format outlined in https://github.com/interledger/interledger/wiki/Interledger-over-CLP
+    // format outlined in https://github.com/interledger/interledger/wiki/Interledger-over-BTP
     // TODO: URL escape
     const uri = this._rpcUri +
       '/' + this._plugin.getInfo().prefix +
