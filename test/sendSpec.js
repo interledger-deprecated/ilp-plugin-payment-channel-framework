@@ -46,14 +46,12 @@ describe('Send', () => {
     this.plugin.addSocket(this.mockSocket)
     yield this.plugin.connect()
 
-    this.ilpError = ilpPacket.serializeIlpError({
+    this.error = {
       code: 'F00',
       name: 'Bad Request',
-      triggeredBy: '',
-      forwardedBy: [],
       triggeredAt: new Date(),
       data: JSON.stringify({ message: 'Peer isn\'t feeling like it.' })
-    })
+    }
   })
 
   afterEach(function * () {
@@ -65,7 +63,7 @@ describe('Send', () => {
       const expectedRequestId = 1234
       this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
         assert.equal(requestId, expectedRequestId)
-        return btpPacket.serializeError({rejectionReason: this.ilpError}, requestId, [])
+        return btpPacket.serializeError(this.error, requestId, [])
       })
 
       const cllpMessage = btpPacket.serializeMessage(expectedRequestId, [])
@@ -294,13 +292,12 @@ describe('Send', () => {
 
     it('should roll back a transfer if the RPC call fails', function * () {
       this.mockSocket.reply(btpPacket.TYPE_PREPARE, ({requestId, data}) => {
-        return btpPacket.serializeError({rejectionReason: this.ilpError},
+        return btpPacket.serializeError(this.error,
           requestId, [])
       })
 
-      const rejectionReason = base64url.encode(this.ilpError)
       yield expect(this.plugin.sendTransfer(this.transfer))
-        .to.eventually.be.rejectedWith(rejectionReason)
+        .to.eventually.be.rejected
 
       assert.equal((yield this.plugin.getBalance()), '0', 'balance should be rolled back')
     })

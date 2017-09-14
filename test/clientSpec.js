@@ -184,16 +184,14 @@ describe('Asymmetric plugin virtual', () => {
           const expectedPacket = btpPacket.deserialize(this.transfer)
           assert.deepEqual(data, expectedPacket.data)
 
-          const ilp = ilpPacket.serializeIlpError({
+          const error = {
             code: 'F00',
             name: 'Bad Request',
-            triggeredBy: '',
-            forwardedBy: [],
             triggeredAt: new Date(),
             data: JSON.stringify({ message: 'Peer isn\'t feeling like it.' })
-          })
+          }
 
-          return btpPacket.serializeError({rejectionReason: ilp}, requestId, [])
+          return btpPacket.serializeError(error, requestId, [])
         })
 
       const prepared = new Promise((resolve, reject) => {

@@ -168,12 +168,10 @@ module.exports = class BtpRpc extends EventEmitter {
     return this._call(requestId, fulfillRequest)
   }
 
-  async reject (transferId, rejectionReason, protocolData) {
+  async reject (transferId, protocolData) {
     const requestId = await _requestId()
-    console.log('ASDFASDF', transferId)
     const rejectRequest = btpPacket.serializeReject({
-      transferId,
-      rejectionReason
+      transferId
     }, requestId, protocolData)
 
     return this._call(requestId, rejectRequest)
