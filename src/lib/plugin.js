@@ -446,11 +446,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const rejectionReason = ilpPacket.serializeIlpError(reason)
 
     this._safeEmit('incoming_reject', transferInfo.transfer, reason)
-    await this._rpc.reject(transferId, rejectionReason, [])
+    await this._rpc.reject(transferId, [{
+      protocolName: 'ilp',
+      contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+      data: rejectionReason
+    }])
   }
 
   async _handleRejectIncomingTransfer ({data}) {
     const transferId = data.id
+    const { ilp } = protocolDataToIlpAndCustom(data)
 
     this.debug('handling rejection of ' + transferId)
     const transferInfo = await this._transfers.get(transferId)
@@ -465,10 +470,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     // TODO: add rejectionReason to interface
-    await this._transfers.cancel(transferId, data.reason)
+    await this._transfers.cancel(transferId, ilp.data)
     this.debug('peer rejected ' + transferId)
 
-    this._safeEmit('outgoing_reject', transferInfo.transfer, data.reason)
+    this._safeEmit('outgoing_reject', transferInfo.transfer, ilp.data)
   }
 
   async getBalance () {
@@ -516,15 +521,20 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       return
     }
 
-    const rejectionReason = {
+    const rejectionReason = ilpPacket.serializeIlpError({
       code: 'R00',
       name: 'Transfer Timed Out',
       triggeredBy: this.getAccount(),
       forwardedBy: [],
       triggeredAt: new Date(),
       data: 'expired'
-    }
-    await this._rpc.reject(transferId, rejectionReason, []).catch(() => {})
+    })
+
+    await this._rpc.reject(transferId, [{
+      protocolName: 'ilp',
+      contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+      data: rejectionReason
+    }]).catch(() => {})
     this._safeEmit((transferInfo.isIncoming ? 'incoming' : 'outgoing') + '_cancel',
       transferInfo.transfer)
   }
