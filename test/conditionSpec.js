@@ -257,15 +257,16 @@ describe('Conditional Transfers', () => {
         .reply(btpPacket.TYPE_RESPONSE)
         .reply(btpPacket.TYPE_REJECT, ({requestId, data}) => {
           assert.equal(data.transferId, this.incomingTransferJson.transferId)
+          const [ ilp ] = data.protocolData.filter(p => p.protocolName === 'ilp')
 
           // TODO: check that the correct BTP error is returned once they are defined
-          const reasonBuffer = Buffer.from(data.rejectionReason, 'base64')
+          const reasonBuffer = ilp.data
           const reason = ilpPacket.deserializeIlpPacket(reasonBuffer).data
           delete reason.triggeredAt
           assert.deepEqual(reason, {
             code: 'R00',
             name: 'Transfer Timed Out',
-            triggeredBy: this.plugin.getAccount(),
+            triggeredBy: 'example.red.server',
             forwardedBy: [],
             // triggeredAt: ...,
             data: 'expired'
@@ -273,7 +274,7 @@ describe('Conditional Transfers', () => {
           return btpPacket.serializeResponse(requestId, [])
         })
 
-      this.incomingTransferJson.expiresAt = (new Date()).toISOString()
+      this.incomingTransferJson.expiresAt = (new Date(Date.now() + 10)).toISOString()
       this.incomingTransferJson.transferId = this.incomingTransferJson.id
       const incomingTransfer = btpPacket.serializePrepare(
         this.incomingTransferJson,
@@ -305,9 +306,10 @@ describe('Conditional Transfers', () => {
         })
         .reply(btpPacket.TYPE_REJECT, ({requestId, data}) => {
           assert.equal(data.transferId, this.transferJson.id)
+          const [ ilp ] = data.protocolData.filter(p => p.protocolName === 'ilp')
 
           // TODO: check that the correct BTP error is returned once they are defined
-          const reasonBuffer = Buffer.from(data.rejectionReason, 'base64')
+          const reasonBuffer = ilp.data
           const reason = ilpPacket.deserializeIlpPacket(reasonBuffer).data
           delete reason.triggeredAt
           assert.deepEqual(reason, {
@@ -365,8 +367,8 @@ describe('Conditional Transfers', () => {
       this.mockSocket
         .reply(btpPacket.TYPE_RESPONSE)
         .reply(btpPacket.TYPE_REJECT, ({requestId, data}) => {
-          const ilpError = ilpPacket.deserializeIlpPacket(Buffer.from(data.rejectionReason,
-            'base64'))
+          const [ ilp ] = data.protocolData.filter(p => p.protocolName === 'ilp')
+          const ilpError = ilpPacket.deserializeIlpPacket(ilp.data)
           assert.equal(data.transferId, this.transferJson.id)
           assert.deepEqual(ilpError.data, expectedRejectionReason)
           return btpPacket.serializeResponse(requestId, [])
@@ -389,8 +391,11 @@ describe('Conditional Transfers', () => {
       })
 
       const btpRejection = btpPacket.serializeReject({
-        transferId: this.transferJson.id,
-        rejectionReason: ilpPacket.serializeIlpError({
+        transferId: this.transferJson.id
+      }, 1111, [{
+        protocolName: 'ilp',
+        contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
+        data: ilpPacket.serializeIlpError({
           code: 'F00',
           name: 'Bad Request',
           triggeredBy: 'g.your.friendly.peer',
@@ -398,7 +403,7 @@ describe('Conditional Transfers', () => {
           triggeredAt: new Date(),
           data: 'reason'
         })
-      }, 1111, [])
+      }])
 
       const rejected = new Promise((resolve) => this.plugin.on('outgoing_reject', resolve))
 
