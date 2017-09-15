@@ -3,7 +3,6 @@
 const crypto = require('crypto')
 const base64url = require('base64url')
 const btpPacket = require('btp-packet')
-const ilpPacket = require('ilp-packet')
 
 const chai = require('chai')
 chai.use(require('chai-as-promised'))

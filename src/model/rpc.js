@@ -1,6 +1,5 @@
 const EventEmitter = require('events')
 const btpPacket = require('btp-packet')
-const ilpPacket = require('ilp-packet')
 const WebSocket = require('ws')
 const assert = require('assert')
 const crypto = require('crypto')
@@ -22,7 +21,7 @@ const namesToCodes = {
 function jsErrorToBtpError (e) {
   const name = e.name || 'NotAcceptedError'
   const code = namesToCodes[name] || 'F00'
-  
+
   return {
     code,
     name,
