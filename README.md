@@ -18,9 +18,9 @@ npm install --save ilp-plugin-payment-channel-framework
 
 ## Usage in ILP Kit
 
-This section explains how to use `ilp-plugin-payment-channel-framework` for an asymetric trustline in [ILP Kit](https://github.com/interledgerjs/ilp-kit/).
+This section explains how to use `ilp-plugin-payment-channel-framework` for an asymmetric trustline in [ILP Kit](https://github.com/interledgerjs/ilp-kit/).
 
-To setup an asymetric trustline server, add the following to ILP Kit's configuration file (Note that all of the following configuration should go into a single line in your config file):
+To setup an asymmetric trustline server, add the following to ILP Kit's configuration file (Note that all of the following configuration should go into a single line in your config file):
 
 
 ```
@@ -33,10 +33,20 @@ CONNECTOR_LEDGERS={
     "currency": "EUR",
     "plugin": "ilp-plugin-payment-channel-framework",
     "options": {
+      // listen for incoming connections
+      "listener": {
+        port: 1234,
+
+        // if a certificate is provided, the server will listen using TLS
+        // instead of plain websockets
+        cert: '/tmp/snakeoil.crt',
+        key: '/tmp/snakeoil.key',
+        ca: '/tmp/snakeoil-ca.crt'
+      },
+      "token": "shared_secret", // shared secret between server and client
+      // the server determines the properties of the trustline
       "maxBalance": "1000000000",
       "prefix": "g.eur.mytrustline.",
-      "token": "shared_secret", // shared secret between server and client
-      "rpcUri": "https://wallet2.example/api/peers/rpc", // RPC endpoint of the trustline peer
       "info": {
       	"currencyScale": 9,
       	"currencyCode": "EUR",
@@ -49,7 +59,7 @@ CONNECTOR_LEDGERS={
 }
 ```
 
-Similarly, add the following to your ILP Kit's config to setup an asymetric trustline client (as with the server config, all of the following should go on a single line in your config file):
+Similarly, add the following to your ILP Kit's config to setup an asymmetric trustline client (as with the server config, all of the following should go on a single line in your config file):
 
 ```
 CONNECTOR_LEDGERS={
@@ -61,14 +71,17 @@ CONNECTOR_LEDGERS={
     "currency": "EUR",
     "plugin": "ilp-plugin-payment-channel-framework",
     "options": {
-      "prefix": "g.eur.mytrustline.",
-      "token": "shared_secret", // shared secret between server and client
-      "rpcUri": "https://wallet1.example/api/peers/rpc",
+      "server": "btp+wss://wallet1.example:1234/example_path",
+      "token": "shared_secret"
     },
     "store": false
   }
 }
 ```
+
+> **Note:** You can provide both the `server` and `listener` properties in which
+> case the BTP peers will automatically elect one of them to be the server and
+> one of them to be the client.
 
 # ILP Plugin Payment Channel Framework
 
@@ -140,7 +153,7 @@ return makePaymentChannelPlugin({
 
     // establish metadata during the connection phase
     ctx.state.prefix = 'peer.network.' + (await Network.getChannelId()) + '.'
-    
+
     // create ILP addresses for self and peer by appending identifiers from the
     // network onto the prefix.
     ctx.state.account = ctx.state.prefix + (await Network.getChannelSource())
@@ -295,7 +308,7 @@ return makePaymentChannelPlugin({
   getInfo: (ctx) => (ctx.state.info),
 
   handleIncomingPrepare: async function (ctx, transfer) {
-    const incoming = await ctx.transferLog.getIncomingFulfilledAndPrepared() 
+    const incoming = await ctx.transferLog.getIncomingFulfilledAndPrepared()
 
     // Instead of getting the best claim, we're getting the sum of all our
     // incoming settlement transfers. This tells us how much incoming money has
@@ -715,7 +728,7 @@ Called when `plugin.disconnect()` is called.
 
 Called when an incoming transfer is being processed, but has not yet been
 prepared. If this function throws an error, the transfer will not be prepared
-and the error will be passed back to the peer. 
+and the error will be passed back to the peer.
 
 #### Parameters
 
