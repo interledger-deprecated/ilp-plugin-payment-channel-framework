@@ -53,7 +53,7 @@
     "base64url": "^2.0.0",
     "bignumber.js": "^2.3.0",
     "chai-as-promised": "^6.0.0",
-    "clp-packet": "git+https://github.com/interledgerjs/clp-packet.git#da-clp-packet",
+    "btp-packet": "git+https://github.com/interledgerjs/btp-packet.git",
     "debug": "^2.2.0",
     "deep-equal": "^1.0.1",
     "eventemitter2": "^2.2.0",
