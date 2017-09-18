@@ -97,6 +97,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
       this._client = new BtpClient({
         server: opts.server,
+        secret: opts.secret,
+        insecure: opts.insecure,
         plugin: this
       })
     } else {
@@ -108,7 +110,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
       this._listener = new BtpListener({
         plugin: this,
-        port: opts.listener.port || DEFAULT_PORT
+        port: opts.listener.port || DEFAULT_PORT,
+        cert: opts.listener.cert,
+        key: opts.listener.key,
+        ca: opts.listener.ca
       })
       this._listener.listen()
     } else {
@@ -129,7 +134,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         [Btp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
         [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
         [Btp.TYPE_MESSAGE]: this._handleRequest.bind(this)
-      }
+      },
+      // the token with which incoming sockets are authenticated. If there
+      // is no listener, then this argument is unnecessary.
+      incomingAuthToken: opts.incomingSecret
     })
 
     if (!opts.server && !(opts.prefix && opts.info)) {

@@ -30,7 +30,7 @@ function jsErrorToBtpError (e) {
 }
 
 module.exports = class BtpRpc extends EventEmitter {
-  constructor ({ client, plugin, handlers, debug }) {
+  constructor ({ client, plugin, handlers, incomingAuthToken, debug }) {
     assert(typeof handlers[btpPacket.TYPE_PREPARE] === 'function', 'Prepare handler missing')
     assert(typeof handlers[btpPacket.TYPE_FULFILL] === 'function', 'Fulfill handler missing')
     assert(typeof handlers[btpPacket.TYPE_REJECT] === 'function', 'Reject handler missing')
@@ -43,31 +43,78 @@ module.exports = class BtpRpc extends EventEmitter {
     this._handlers = handlers
     this._client = client
     this._plugin = plugin
+    this._incomingAuthToken = incomingAuthToken
     this.debug = debug
   }
 
-  addSocket (socket) {
-    _assertSocket(socket)
+  async addSocket (socket, authToken) {
+    const newSocketIndex = this._sockets.length
+    const isClient = Boolean(authToken)
+    _assertSocket({ socket, authorized: isClient })
+
     this.debug('adding socket')
-    this._sockets.push(socket)
+
+    // if we're the client on this socket, we don't need to receive
+    // any authentication data. we have to send it instead.
+    this._sockets.push({ socket, authorized: isClient })
     socket.on('message', async (message) => {
       this.debug('got message:', Buffer.from(message).toString('hex'))
       try {
-        await this.handleMessage(socket, message)
+        await this.handleMessage(newSocketIndex, message)
       } catch (err) {
         this.debug(`RPC Error: ${err.message}. Message was ${JSON.stringify(message)}`)
       }
     })
+
+    // if this is a client, then send a special request with which to
+    // authenticate.
+    if (isClient) {
+      const requestId = await _requestId()
+      await _send(socket, btpPacket.serializeMessage(requestId, [{
+        protocolName: 'auth',
+        contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
+        data: Buffer.from([])
+      }, {
+        protocolName: 'auth_token',
+        contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
+        data: Buffer.from(authToken, 'utf8')
+      }]))
+
+      return new Promise((resolve, reject) => {
+        const handleAuthResponse = (type, data) => {
+          if (type === btpPacket.TYPE_RESPONSE) {
+            resolve(data)
+          } else if (type === btpPacket.TYPE_ERROR) {
+            reject(new Error(JSON.stringify(data)))
+          } else {
+            reject(new Error('Unkown BTP packet type', data))
+          }
+        }
+
+        this.once('_' + requestId, handleAuthResponse)
+      })
+    }
   }
 
   setAuthToken (token) {
     this._token = token
   }
 
-  async handleMessage (socket, message) {
-    _assertSocket(socket)
+  async handleMessage (socketIndex, message) {
+    const socketData = this._sockets[socketIndex]
+    _assertSocket(socketData)
+
+    const socket = socketData.socket
     const {type, requestId, data} = btpPacket.deserialize(message)
     const typeString = btpPacket.typeToString(type)
+
+    if (!socketData.authorized) {
+      // authentication handling must be done inside of the RPC module because
+      // it happens on a per-socket basis rather than per plugin.
+      this._handleAuth(socketIndex, { type, requestId, data })
+      return
+    }
+
     if (data.transferId) {
       data.id = data.transferId
       delete data.transferId
@@ -103,6 +150,66 @@ module.exports = class BtpRpc extends EventEmitter {
     }
   }
 
+  // authentication handling must be done in the RPC, because it's done
+  // on a per-socket basis rather than a per-plugin basis.
+  async _handleAuth (socketIndex, { type, requestId, data }) {
+    const socketData = this._sockets[socketIndex]
+    debug('authenticating socket #' + socketIndex)
+
+    if (type !== btpPacket.TYPE_MESSAGE) {
+      debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
+      await _send(socketData.socket, btpPacket.serializeError({
+        code: 'F01',
+        name: 'InvalidFieldsError',
+        triggeredAt: new Date(),
+        data: JSON.stringify({ message: 'invalid method on unauthenticated socket' })
+      }, requestId, []))
+      return
+    }
+
+    if (data.protocolData[0].protocolName !== 'auth') {
+      debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
+      await _send(socketData.socket, btpPacket.serializeError({
+        code: 'F01',
+        name: 'InvalidFieldsError',
+        triggeredAt: new Date(),
+        data: JSON.stringify({ message: 'auth must be primary protocol on unauthenticated message' })
+      }, requestId, []))
+      return
+    }
+
+    const [ authToken ] = data.protocolData.filter(p => p.protocolName === 'auth_token')
+    if (!authToken) {
+      debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
+      await _send(socketData.socket, btpPacket.serializeError({
+        code: 'F01',
+        name: 'InvalidFieldsError',
+        triggeredAt: new Date(),
+        data: JSON.stringify({ message: 'missing "auth_token" secondary protocol' })
+      }, requestId, []))
+      return
+    }
+
+    const isValidAndAuthorized =
+      authToken.contentType === btpPacket.MIME_TEXT_PLAIN_UTF8 &&
+      authToken.data.toString() === this._incomingAuthToken
+
+    if (!isValidAndAuthorized) {
+      debug(`responding to invalid auth token: ${authToken}`)
+      await _send(socketData.socket, btpPacket.serializeError({
+        code: 'F00',
+        name: 'NotAcceptedError',
+        triggeredAt: new Date(),
+        data: JSON.stringify({ message: 'invalid auth token' })
+      }, requestId, []))
+      return
+    }
+
+    await _send(socket, btpPacket.serializeResponse(requestId, result || []))
+    socketData.authenticated = true
+    debug('authenticated socket #' + socketIndex)
+  }
+
   async _call (id, data) {
     if (!this._sockets.length) {
       this.debug('connecting socket')
@@ -114,7 +221,8 @@ module.exports = class BtpRpc extends EventEmitter {
     }
 
     this.debug('sending ', Buffer.from(data).toString('hex'))
-    await Promise.all(this._sockets.map(async (socket) => _send(socket, data)))
+    await Promise.all(this._sockets.map(async (socketData) =>
+      socketData.authorized && _send(socketData.socket, data)))
 
     let callback
     const response = new Promise((resolve, reject) => {
@@ -188,8 +296,8 @@ module.exports = class BtpRpc extends EventEmitter {
   }
 
   disconnect () {
-    this._sockets.map((socket) => {
-      socket.close()
+    this._sockets.map((socketData) => {
+      socketData.socket.close()
     })
     this._sockets = []
   }
@@ -216,8 +324,11 @@ async function _requestId () {
 }
 
 function _assertSocket (socket) {
-  if (typeof socket.send !== 'function' ||
-      typeof socket.on !== 'function') {
+  if (!socket ||
+      typeof socket !== 'object' ||
+      typeof socket.socket !== 'object' ||
+      typeof socket.socket.send !== 'function' ||
+      typeof socket.socket.on !== 'function') {
     throw new TypeError(`Argument expected to be a socket object.`)
   }
 }
