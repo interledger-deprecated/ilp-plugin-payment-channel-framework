@@ -34,7 +34,7 @@ describe('makePaymentChannelPlugin', function () {
       secret: 'seeecret',
       maxBalance: '1000000',
       minBalance: '-40',
-      rpcUri: 'https://example.com/rpc',
+      server: 'btp+https://example.com/rpc',
       info: this.info,
       _store: new ObjStore()
     }
@@ -89,9 +89,11 @@ describe('makePaymentChannelPlugin', function () {
     }, requestId + 1, [])
 
     this.mockSocket = new MockSocket()
-    this.plugin.addSocket(this.mockSocket)
+    await this.plugin.addSocket(this.mockSocket)
 
+    console.log('beginning connect')
     await this.plugin.connect()
+    console.log('finished connect')
   })
 
   afterEach(async function () {
@@ -99,7 +101,7 @@ describe('makePaymentChannelPlugin', function () {
   })
 
   describe('constructor', function () {
-    it('should be called at construct time', function () {
+    it.only('should be called at construct time', function () {
       let called = false
       this.channel.constructor = (ctx, opts) => {
         called = true
