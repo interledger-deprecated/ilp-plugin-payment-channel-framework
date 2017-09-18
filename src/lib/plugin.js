@@ -2,12 +2,15 @@
 
 const EventEmitter2 = require('eventemitter2')
 const crypto = require('crypto')
+const url = require('url')
 const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
 
 const Btp = require('btp-packet')
 const BtpRpc = require('../model/rpc')
+const BtpClient = require('./client')
+const BtpListener = require('./listener')
 const CustomRpc = require('../model/custom-rpc')
 const Validator = require('../util/validator')
 const getBackend = require('../util/backend')
@@ -20,6 +23,9 @@ const InvalidFieldsError = errors.InvalidFieldsError
 const AlreadyRejectedError = errors.AlreadyRejectedError
 const AlreadyFulfilledError = errors.AlreadyFulfilledError
 const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegisteredError
+
+// TODO: What should the default port be?
+const DEFAULT_PORT = 4195
 
 const assertOptionType = (opts, field, type) => {
   const val = opts[field]
@@ -70,18 +76,54 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       })
     }
 
-    assertOptionType(opts, 'rpcUri', 'string')
-    this._rpcUri = opts.rpcUri
-
     this._connected = false
     this._requestHandler = null
     this._sideProtoHandler = {}
 
+    if (opts.server) {
+      assertOptionType(opts, 'server', 'string')
+
+      // token can be provided via the URL
+      // e.g. btp+wss://:token@host.example:1234/path
+      const parsed = url.parse(opts.server)
+      if (parsed.auth) {
+        const [, token] = parsed.auth.split(':')
+        opts.token = token
+
+        // remove token from url
+        parsed.auth = null
+        opts.server = url.format(parsed)
+      }
+
+      this._client = new BtpClient({
+        server: opts.server,
+        plugin: this
+      })
+    } else {
+      this._client = null
+    }
+
+    if (opts.listener) {
+      assertOptionType(opts, 'listener', 'object')
+
+      this._listener = new BtpListener({
+        plugin: this,
+        port: opts.listener.port || DEFAULT_PORT
+      })
+      this._listener.listen()
+    } else {
+      this._listener = null
+    }
+
+    if (!opts.server && !opts.listener) {
+      throw new Error('plugin must be configured either as a client (in which case you need to provide a \'server\' in the config) or as a server (in which case you need to provide a \'listener\' config)')
+    }
+
     // register RPC methods
     this._rpc = new BtpRpc({
-      rpcUri: this._rpcUri,
       plugin: this,
       debug: this.debug,
+      client: this._client,
       handlers: {
         [Btp.TYPE_PREPARE]: this._handleTransfer.bind(this),
         [Btp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
@@ -89,6 +131,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         [Btp.TYPE_MESSAGE]: this._handleRequest.bind(this)
       }
     })
+
+    if (!opts.server && !(opts.prefix && opts.info)) {
+      throw new Error('when running in server mode, the \'prefix\' and \'info\' config parameters are required')
+    }
 
     if (this._stateful && paymentChannelBackend) {
       Validator.validatePaymentChannelBackend(paymentChannelBackend)
@@ -110,9 +156,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._getAuthToken = () => this._paychan.getAuthToken(this._paychanContext)
     } else {
       assertOptionType(opts, 'token', 'string')
-      assertOptionType(opts, 'prefix', 'string')
 
-      this._info = opts.info
+      this._info = opts.info || null
       this._peerAccountName = this._stateful ? 'client' : 'server'
       this._accountName = this._stateful ? 'server' : 'client'
       this._prefix = opts.prefix
@@ -127,7 +172,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         handleIncomingClaim: () => Promise.resolve()
       }
 
-      this.getInfo = () => JSON.parse(JSON.stringify(this._info))
+      this.getInfo = () => this._info && JSON.parse(JSON.stringify(this._info))
       this.getAccount = () => (this._prefix + this._accountName)
       this.getPeerAccount = () => (this._prefix + this._peerAccountName)
       this._getAuthToken = () => opts.token
@@ -170,7 +215,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async connect () {
-    if (!this._stateful) {
+    if (!(this._info && this._prefix)) {
+      this.debug('info not available locally, loading remotely')
       const btpResponse = await this._rpc.message(
         [{
           protocolName: 'get_info',
@@ -180,11 +226,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       )
       const resp = protocolDataToIlpAndCustom(btpResponse)
       this._info = (resp.custom && resp.custom.get_info) || {}
+      this._prefix = this.getInfo().prefix
     }
 
     await this._paychan.connect(this._paychanContext)
 
-    this._prefix = this.getInfo().prefix
     this._validator = new Validator({
       account: this.getAccount(),
       peer: this.getPeerAccount(),
