@@ -1,6 +1,5 @@
 const EventEmitter = require('events')
 const btpPacket = require('btp-packet')
-const WebSocket = require('ws')
 const assert = require('assert')
 const crypto = require('crypto')
 
@@ -31,18 +30,18 @@ function jsErrorToBtpError (e) {
 }
 
 module.exports = class BtpRpc extends EventEmitter {
-  constructor ({ rpcUri, plugin, handlers, debug }) {
+  constructor ({ client, plugin, handlers, debug }) {
     assert(typeof handlers[btpPacket.TYPE_PREPARE] === 'function', 'Prepare handler missing')
     assert(typeof handlers[btpPacket.TYPE_FULFILL] === 'function', 'Fulfill handler missing')
     assert(typeof handlers[btpPacket.TYPE_REJECT] === 'function', 'Reject handler missing')
     assert(typeof handlers[btpPacket.TYPE_MESSAGE] === 'function', 'Message handler missing')
-    assert(typeof rpcUri === 'string', 'rpcUri must be string')
+    assert(!client || typeof client === 'object', 'client must be an object')
     assert(typeof plugin === 'object', 'plugin must be provided')
 
     super()
     this._sockets = []
     this._handlers = handlers
-    this._rpcUri = rpcUri
+    this._client = client
     this._plugin = plugin
     this.debug = debug
   }
@@ -107,7 +106,11 @@ module.exports = class BtpRpc extends EventEmitter {
   async _call (id, data) {
     if (!this._sockets.length) {
       this.debug('connecting socket')
-      await this._connect()
+      if (this._client) {
+        await this._client.connect()
+      } else {
+        throw new Error('no connection')
+      }
     }
 
     this.debug('sending ', Buffer.from(data).toString('hex'))
@@ -182,26 +185,6 @@ module.exports = class BtpRpc extends EventEmitter {
 
     this.debug('send message:', messageRequest)
     return this._call(requestId, messageRequest)
-  }
-
-  async _connect () {
-    // This follows the:
-    // wss://${HOSTNAME}:${PORT}/${NAME}/${TOKEN}
-    // format outlined in https://github.com/interledger/interledger/wiki/Interledger-over-BTP
-    // TODO: URL escape
-    const uri = this._rpcUri +
-      '/' + this._plugin.getInfo().prefix +
-      '/' + this._token
-
-    this.debug('connecting to', uri)
-    const ws = new WebSocket(uri)
-
-    return new Promise((resolve) => {
-      ws.on('open', () => {
-        this.addSocket(ws)
-        resolve()
-      })
-    })
   }
 
   disconnect () {
