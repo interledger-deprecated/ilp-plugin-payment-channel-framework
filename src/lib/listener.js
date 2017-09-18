@@ -36,25 +36,8 @@ module.exports = class BtpListener {
     })
     debug('listening for websocket connections on port ' + this._port)
 
-    this._socketServer.on('connection', socket => {
-      // TODO: Authorization
-      // const url = socket.upgradeReq.url
-      // const params = url.match(/^\/api\/peers\/rpc\/ws\/(.+?)\/(.+?)\/?$/)
-      // if (!params) {
-      //   debug('Error: no ws at "' + url + '"')
-      //   socket.close()
-      //   return
-      // }
-      //
-      // const [ , prefix, token ] = params
-      //
-      // if (!plugin || !plugin.isAuthorized(token)) {
-      //   debug(`Error: prefix (${prefix}) and/or token (${token}) are incorrect`)
-      //   socket.close()
-      //   return
-      // }
-
-      this._plugin.addSocket(socket)
+    this._socketServer.on('connection', async (socket) => {
+      await this._plugin.addSocket(socket)
     })
   }
 }
