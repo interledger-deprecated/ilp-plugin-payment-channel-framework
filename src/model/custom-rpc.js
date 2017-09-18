@@ -17,7 +17,16 @@ module.exports = class CustomRpc {
     )
 
     // TODO: handle errors
-    return JSON.parse(Buffer.from(response.protocolData[method], 'utf8'))
+    const protocolResponse = response.protocolData.filter((x) => x.protocolName === method)
+    if (protocolResponse.length === 0) {
+      // TODO: should it throw an error if there is no resopnse for the sub-protocol?
+      return {}
+    } else if (protocolResponse.length === 1) {
+      return JSON.parse(Buffer.from(protocolResponse[0].data, 'utf8'))
+    } else {
+      throw new Error(`Ambigious response for ${method} request with data ${args}.` +
+        ` Response is: ${protocolResponse}`)
+    }
   }
 
   addMethod (protocol, method) {
