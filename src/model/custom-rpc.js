@@ -8,13 +8,13 @@ module.exports = class CustomRpc {
 
   // prefix argument is included for backwards-compatibility
   async call (method, prefix, args) {
-    const response = await this._btpRpc.message({
-      protocolData: [{
+    const response = await this._btpRpc.message(
+      [{
         protocolName: method,
         contentType: Btp.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(args))
       }]
-    })
+    )
 
     // TODO: handle errors
     return JSON.parse(Buffer.from(response.protocolData[method], 'utf8'))
@@ -38,7 +38,6 @@ module.exports = class CustomRpc {
         data: Buffer.from(JSON.stringify(response))
       })
     }
-
     return responseProtocolData
   }
 }
