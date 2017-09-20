@@ -78,6 +78,10 @@ module.exports = class BtpRpc extends EventEmitter {
         protocolName: 'auth_token',
         contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
         data: Buffer.from(authToken, 'utf8')
+      }, {
+        protocolName: 'auth_username',
+        contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
+        data: Buffer.from('', 'utf8')
       }]))
 
       return new Promise((resolve, reject) => {
@@ -190,7 +194,21 @@ module.exports = class BtpRpc extends EventEmitter {
       return
     }
 
+    const [ authUsername ] = data.protocolData.filter(p => p.protocolName === 'auth_username')
+    if (!authToken) {
+      this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
+      await _send(socketData.socket, btpPacket.serializeError({
+        code: 'F01',
+        name: 'InvalidFieldsError',
+        triggeredAt: new Date(),
+        data: JSON.stringify({ message: 'missing "auth_username" secondary protocol' })
+      }, requestId, []))
+      return
+    }
+
     const isValidAndAuthorized =
+      authUsername.contentType === btpPacket.MIME_TEXT_PLAIN_UTF8 &&
+      authToken.data.toString() === '' &&
       authToken.contentType === btpPacket.MIME_TEXT_PLAIN_UTF8 &&
       authToken.data.toString() === this._incomingAuthToken
 
@@ -200,7 +218,7 @@ module.exports = class BtpRpc extends EventEmitter {
         code: 'F00',
         name: 'NotAcceptedError',
         triggeredAt: new Date(),
-        data: JSON.stringify({ message: 'invalid auth token' })
+        data: JSON.stringify({ message: 'invalid auth token and/or username' })
       }, requestId, []))
       return
     }
