@@ -4,30 +4,31 @@ const Btp = require('btp-packet')
 const base64url = require('base64url')
 
 function protocolDataToIlpAndCustom ({ protocolData }) {
-  const ret = {}
+  const protocolMap = {}
 
   for (const protocol of protocolData) {
     const name = protocol.protocolName
-    if (name === 'ilp') {
-      ret.ilp = base64url(protocol.data)
-      continue
-    }
 
-    ret.custom = ret.custom || {}
     if (protocol.contentType === Btp.MIME_TEXT_PLAIN_UTF8) {
-      ret.custom[name] = protocol.data.toString('utf8')
+      protocolMap[name] = protocol.data.toString('utf8')
     } else if (protocol.contentType === Btp.MIME_APPLICATION_JSON) {
-      ret.custom[name] = JSON.parse(protocol.data.toString('utf8'))
+      protocolMap[name] = JSON.parse(protocol.data.toString('utf8'))
     } else {
-      ret.custom[name] = protocol.data
+      protocolMap[name] = protocol.data
     }
   }
 
-  return ret
+  return {
+    protocolMap,
+    ilp: protocolMap.ilp && base64url(protocolMap.ilp.data),
+    custom: protocolMap.custom
+  }
 }
 
-function ilpAndCustomToProtocolData ({ ilp, custom }) {
+function ilpAndCustomToProtocolData ({ ilp, custom, protocolMap }) {
   const protocolData = []
+
+  // ILP is always the primary protocol when it's specified
   if (ilp) {
     protocolData.push({
       protocolName: 'ilp',
@@ -36,29 +37,40 @@ function ilpAndCustomToProtocolData ({ ilp, custom }) {
     })
   }
 
-  if (custom) {
-    const sideProtocols = Object.keys(custom)
+  // explicitly specified sub-protocols come next
+  if (protocolMap) {
+    const sideProtocols = Object.keys(protocolMap)
     for (const protocol of sideProtocols) {
-      if (Buffer.isBuffer(custom[protocol])) {
+      if (Buffer.isBuffer(protocolMap[protocol])) {
         protocolData.push({
           protocolName: protocol,
           contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-          data: custom[protocol]
+          data: protocolMap[protocol]
         })
-      } else if (typeof custom[protocol] === 'string') {
+      } else if (typeof protocolMap[protocol] === 'string') {
         protocolData.push({
           protocolName: protocol,
           contentType: Btp.MIME_TEXT_PLAIN_UTF8,
-          data: Buffer.from(custom[protocol])
+          data: Buffer.from(protocolMap[protocol])
         })
       } else {
         protocolData.push({
           protocolName: protocol,
           contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(custom[protocol]))
+          data: Buffer.from(JSON.stringify(protocolMap[protocol]))
         })
       }
     }
+  }
+
+  // the "custom" side protocol is always secondary unless its the only sub
+  // protocol.
+  if (custom) {
+    protocolData.push({
+      protocolName: 'custom',
+      contentType: Btp.MIME_APPLICATION_JSON,
+      data: Buffer.from(JSON.stringify(custom))
+    })
   }
 
   return protocolData
