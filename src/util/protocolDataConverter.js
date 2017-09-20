@@ -20,7 +20,7 @@ function protocolDataToIlpAndCustom ({ protocolData }) {
 
   return {
     protocolMap,
-    ilp: protocolMap.ilp && base64url(protocolMap.ilp.data),
+    ilp: protocolMap.ilp && base64url(protocolMap.ilp),
     custom: protocolMap.custom
   }
 }

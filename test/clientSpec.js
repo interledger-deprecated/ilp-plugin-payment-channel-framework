@@ -33,31 +33,27 @@ const info = {
 
 const peerAddress = 'example.red.server'
 const options = {
-  prefix: 'example.red.',
-  token: 'placeholder',
-  currencyCode: 'USD',
-  currencyScale: 2,
-  maxBalance: '1000000',
-  minBalance: '-40',
-  rpcUri: 'https://example.com/rpc'
+  secret: 'placeholder',
+  server: 'btp+https://example.com/rpc'
 }
 
 describe('Asymmetric plugin virtual', () => {
-  beforeEach(function * () {
+  beforeEach(async function () {
+    this.mockSocketIndex = 0
     this.mockSocket = new MockSocket()
-    this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId}) => {
-      return btpPacket.serializeResponse(requestId, [{
+    this.mockSocket
+      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
+      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, [{
         protocolName: 'get_info',
         contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(info))
-      }])
-    })
+      }]))
 
     this.plugin = new PluginPaymentChannel(Object.assign({},
       options))
 
-    this.plugin.addSocket(this.mockSocket)
-    yield this.plugin.connect()
+    await this.plugin.addSocket(this.mockSocket, 'placeholder')
+    await this.plugin.connect()
   })
 
   afterEach(async function () {
@@ -147,7 +143,7 @@ describe('Asymmetric plugin virtual', () => {
       const fulfilled = new Promise((resolve) =>
         this.plugin.once('outgoing_fulfill', () => resolve()))
 
-      await this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
       await fulfilled
     })
 
@@ -167,7 +163,7 @@ describe('Asymmetric plugin virtual', () => {
       const prepared = new Promise((resolve) =>
         this.plugin.once('incoming_prepare', () => resolve()))
 
-      await this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
+      await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer)
       await prepared
 
       const fulfilled = new Promise((resolve) =>

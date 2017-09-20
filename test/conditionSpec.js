@@ -27,11 +27,9 @@ const info = {
 const peerAddress = 'example.red.client'
 const options = {
   prefix: 'example.red.',
-  token: 'placeholder',
-  currencyCode: 'USD',
-  currencyScale: 2,
+  secret: 'placeholder',
   maxBalance: '10',
-  rpcUri: 'https://example.com/rpc',
+  server: 'btp+https://example.com/rpc',
   info: info
 }
 
@@ -82,8 +80,12 @@ describe('Conditional Transfers', () => {
       ilpAndCustomToProtocolData(this.incomingTransferJson)
     )
 
+    this.mockSocketIndex = 0
     this.mockSocket = new MockSocket()
-    this.plugin.addSocket(this.mockSocket)
+    this.mockSocket
+      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
+
+    yield this.plugin.addSocket(this.mockSocket, 'placeholder')
     yield this.plugin.connect()
   })
 
@@ -105,7 +107,7 @@ describe('Conditional Transfers', () => {
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
@@ -122,7 +124,7 @@ describe('Conditional Transfers', () => {
 
       const fulfilled = new Promise((resolve) => this.plugin.on('incoming_fulfill', resolve))
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, this.incomingTransfer)
       yield this.plugin.fulfillCondition(this.transferJson.id, this.fulfillment)
       yield fulfilled
 
@@ -145,7 +147,7 @@ describe('Conditional Transfers', () => {
         // TODO: assert data contains the expected rejection reason
       })
 
-      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, transfer))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocketIndex, transfer))
         .to.eventually.be.rejectedWith(/balanceIncomingFulfilledAndPrepared exceeds greatest allowed value/)
 
       assert.isFalse(incomingPrepared, 'incoming_prepare should not be emitted')
@@ -165,7 +167,7 @@ describe('Conditional Transfers', () => {
 
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
       yield fulfilled
 
       assert.equal((yield this.plugin.getBalance()), '-5', 'balance should decrease by amount')
@@ -284,7 +286,7 @@ describe('Conditional Transfers', () => {
 
       const cancel = new Promise((resolve) => this.plugin.on('incoming_cancel', resolve))
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, incomingTransfer)
       yield cancel
 
       assert.equal((yield this.plugin.getBalance()), '0', 'balance should not change')
@@ -345,7 +347,7 @@ describe('Conditional Transfers', () => {
       yield this.plugin.sendTransfer(this.transferJson)
       yield sent
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
       yield fulfilled
       yield this.plugin._expireTransfer(this.transferJson.id)
 
@@ -376,7 +378,7 @@ describe('Conditional Transfers', () => {
 
       const rejected = new Promise((resolve) => this.plugin.on('incoming_reject', resolve))
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, this.incomingTransfer)
       yield this.plugin.rejectIncomingTransfer(this.transferJson.id, expectedRejectionReason)
       yield rejected
 
@@ -409,7 +411,7 @@ describe('Conditional Transfers', () => {
 
       yield this.plugin.sendTransfer(this.transferJson)
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, btpRejection)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, btpRejection)
       yield rejected
     })
 
@@ -433,7 +435,7 @@ describe('Conditional Transfers', () => {
           // ...
         })
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.incomingTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, this.incomingTransfer)
 
       const btpRejection = btpPacket.serializeReject({
         transferId: this.transferJson.id,
@@ -446,7 +448,7 @@ describe('Conditional Transfers', () => {
           data: 'reason'
         })
       }, 1111, [])
-      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, btpRejection))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocketIndex, btpRejection))
         .to.eventually.be.rejected
     })
   })
