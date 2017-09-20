@@ -29,8 +29,6 @@ describe('makePaymentChannelPlugin', function () {
     }
 
     this.opts = {
-      currencyCode: 'USD',
-      currencyScale: 2,
       secret: 'seeecret',
       maxBalance: '1000000',
       minBalance: '-40',
@@ -88,12 +86,18 @@ describe('makePaymentChannelPlugin', function () {
       fulfillment: base64url(this.fulfillment)
     }, requestId + 1, [])
 
+    this.mockSocketIndex = 0
     this.mockSocket = new MockSocket()
-    await this.plugin.addSocket(this.mockSocket)
+    this.mockSocket
+      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
+      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, [{
+        protocolName: 'get_info',
+        contentType: btpPacket.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify(this.info))
+      }]))
 
-    console.log('beginning connect')
+    await this.plugin.addSocket(this.mockSocket, 'password')
     await this.plugin.connect()
-    console.log('finished connect')
   })
 
   afterEach(async function () {
@@ -101,7 +105,7 @@ describe('makePaymentChannelPlugin', function () {
   })
 
   describe('constructor', function () {
-    it.only('should be called at construct time', function () {
+    it('should be called at construct time', function () {
       let called = false
       this.channel.constructor = (ctx, opts) => {
         called = true
@@ -172,7 +176,7 @@ describe('makePaymentChannelPlugin', function () {
       this.transferJson.to = this.plugin.getAccount()
       const emitted = new Promise((resolve) => this.plugin.on('incoming_prepare', resolve))
 
-      this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
+      this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer)
       await emitted
       assert.equal(called, true)
 
@@ -197,7 +201,7 @@ describe('makePaymentChannelPlugin', function () {
       this.mockSocket.reply(btpPacket.TYPE_ERROR)
 
       await assert.isRejected(
-        this.plugin._rpc.handleMessage(this.mockSocket, this.transfer),
+        this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer),
         /^no$/)
 
       assert.equal(called, true)
@@ -232,7 +236,7 @@ describe('makePaymentChannelPlugin', function () {
 
       await this.plugin.sendTransfer(this.transferJson)
 
-      await this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
 
       await called
       assert.equal(await this.plugin._transfers.getOutgoingFulfilled(), '5')
@@ -251,7 +255,7 @@ describe('makePaymentChannelPlugin', function () {
       }).reply(btpPacket.TYPE_RESPONSE)
 
       await this.plugin.sendTransfer(this.transferJson)
-      await this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
 
       assert.equal(await this.plugin._transfers.getOutgoingFulfilled(), '5')
     })
@@ -285,7 +289,7 @@ describe('makePaymentChannelPlugin', function () {
       this.transfer.from = this.transfer.to
       this.transfer.to = this.plugin.getAccount()
 
-      await this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
+      await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer)
       await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
 
       await called
@@ -311,7 +315,7 @@ describe('makePaymentChannelPlugin', function () {
       this.transfer.from = this.transfer.to
       this.transfer.to = this.plugin.getAccount()
 
-      await this.plugin._rpc.handleMessage(this.mockSocket, this.transfer)
+      await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer)
       await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
     })
   })
@@ -319,9 +323,9 @@ describe('makePaymentChannelPlugin', function () {
   describe('side-protocols', function () {
     it('should handle custom side-protocols in a BTP message', function * () {
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({data}) => {
-        const {custom} = protocolDataToIlpAndCustom(data)
-        assert(custom)
-        assert.equal(custom['echo-protocol'], 'hello there back')
+        const { protocolMap } = protocolDataToIlpAndCustom(data)
+        assert(protocolMap)
+        assert.equal(protocolMap['echo-protocol'], 'hello there back')
       })
 
       const btpMessage = btpPacket.serializeMessage(12345, [{
@@ -329,7 +333,7 @@ describe('makePaymentChannelPlugin', function () {
         contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify('hello there'))
       }])
-      this.plugin._rpc.handleMessage(this.mockSocket, btpMessage)
+      this.plugin._rpc.handleMessage(this.mockSocketIndex, btpMessage)
     })
   })
 })
