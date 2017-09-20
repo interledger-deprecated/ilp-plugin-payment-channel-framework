@@ -233,7 +233,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         }]
       )
       const resp = protocolDataToIlpAndCustom(btpResponse)
-      this._info = (resp.custom && resp.custom.get_info) || {}
+      this._info = (resp.protocolMap && resp.protocolMap.get_info) || {}
       this._prefix = this.getInfo().prefix
     }
 
@@ -277,27 +277,30 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async _handleRequest ({requestId, data}) {
+    const { ilp, custom, protocolMap } = protocolDataToIlpAndCustom(data)
     const message = Object.assign({
       id: requestId,
       to: this.getAccount(),
-      from: this.getPeerAccount()
-    }, protocolDataToIlpAndCustom(data))
+      from: this.getPeerAccount(),
+      ilp,
+      custom
+    })
 
     // if there are side protocols only
-    if (message.custom && !message.ilp) {
-      if (message.custom.get_info) {
+    if (!ilp) {
+      if (protocolMap.get_info) {
         return [{
           protocolName: 'get_info',
           contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(this.getInfo()))
         }]
-      } else if (message.custom.get_balance) {
+      } else if (protocolMap.get_balance) {
         return [{
           protocolName: 'get_balance',
           contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(await this._handleGetBalance()))
         }]
-      } else if (message.custom.get_limit) {
+      } else if (protocolMap.get_limit) {
         return [{
           protocolName: 'get_limit',
           contentType: Btp.MIME_APPLICATION_JSON,
@@ -305,7 +308,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         }]
       } else {
         if (this._paychanContext.rpc.handleProtocols) {
-          return this._paychanContext.rpc.handleProtocols(message.custom)
+          return this._paychanContext.rpc.handleProtocols(protocolMap)
         } else {
           throw new Error('Unsupported side protocol.')
         }
@@ -337,7 +340,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validator.validateOutgoingMessage(response)
     this._safeEmit('outgoing_response', response)
 
-    return ilpAndCustomToProtocolData(response)
+    return ilpAndCustomToProtocolData({ ilp: response.ilp, custom: response.custom })
   }
 
   async sendTransfer (preTransfer) {
@@ -364,6 +367,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async _handleTransfer ({data}) {
+    const { ilp, custom, protocolMap } = protocolDataToIlpAndCustom(data)
     const transfer = Object.assign({
       id: data.id,
       amount: data.amount,
@@ -371,8 +375,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       expiresAt: data.expiresAt.toISOString(),
       to: this.getAccount(),
       from: this.getPeerAccount(),
-      ledger: this._prefix
-    }, protocolDataToIlpAndCustom(data))
+      ledger: this._prefix,
+      ilp,
+      custom
+    })
 
     this._validator.validateIncomingTransfer(transfer)
     await this._transfers.prepare(transfer, true)
@@ -419,8 +425,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const protocolData = []
     const result = await this._rpc.fulfill(transferId, fulfillment, protocolData)
 
-    const {custom} = protocolDataToIlpAndCustom(result)
-    const claim = (custom && custom.claim) || {}
+    const { protocolMap } = protocolDataToIlpAndCustom(result)
+    const { claim } = protocolMap || {}
 
     try {
       await this._paychan.handleIncomingClaim(this._paychanContext, claim)
@@ -463,7 +469,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     return result === undefined ? [] : ilpAndCustomToProtocolData({
-      custom: {
+      protocolMap: {
         claim: result
       }
     })
@@ -640,9 +646,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         data: Buffer.from('[]')
       }]
     )
-    const { custom } = (protocolDataToIlpAndCustom(peerMaxBalance))
-    if (custom && custom.get_limit) {
-      return this._stringNegate(custom.get_limit)
+    const { protocolMap } = (protocolDataToIlpAndCustom(peerMaxBalance))
+    if (protocolMap.get_limit) {
+      return this._stringNegate(protocolMap.get_limit)
     } else {
       throw new Error('Failed to get limit of peer.')
     }
@@ -658,8 +664,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       }]
     )
 
-    const parsed = protocolDataToIlpAndCustom(btpResponse)
-    const balance = parsed && parsed.custom && parsed.custom.get_balance
+    const { protocolMap } = protocolDataToIlpAndCustom(btpResponse)
+    const balance = protocolMap.get_balance
     if (!balance) {
       throw new Error('Could not get peer balance.')
     }
