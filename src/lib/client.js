@@ -10,8 +10,6 @@ module.exports = class BtpClient {
     this._server = server
     this._plugin = plugin
 
-    const uri = this._server.slice(4)
-
     // The server URI must follow the format: btp+wss://host:port/path
     // See also: https://github.com/interledger/interledger/wiki/Interledger-over-BTP
     const parsedServer = url.parse(server)

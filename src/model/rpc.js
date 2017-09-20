@@ -154,10 +154,10 @@ module.exports = class BtpRpc extends EventEmitter {
   // on a per-socket basis rather than a per-plugin basis.
   async _handleAuth (socketIndex, { type, requestId, data }) {
     const socketData = this._sockets[socketIndex]
-    debug('authenticating socket #' + socketIndex)
+    this.debug('authenticating socket #' + socketIndex)
 
     if (type !== btpPacket.TYPE_MESSAGE) {
-      debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
+      this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
       await _send(socketData.socket, btpPacket.serializeError({
         code: 'F01',
         name: 'InvalidFieldsError',
@@ -168,7 +168,7 @@ module.exports = class BtpRpc extends EventEmitter {
     }
 
     if (data.protocolData[0].protocolName !== 'auth') {
-      debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
+      this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
       await _send(socketData.socket, btpPacket.serializeError({
         code: 'F01',
         name: 'InvalidFieldsError',
@@ -180,7 +180,7 @@ module.exports = class BtpRpc extends EventEmitter {
 
     const [ authToken ] = data.protocolData.filter(p => p.protocolName === 'auth_token')
     if (!authToken) {
-      debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
+      this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
       await _send(socketData.socket, btpPacket.serializeError({
         code: 'F01',
         name: 'InvalidFieldsError',
@@ -195,7 +195,7 @@ module.exports = class BtpRpc extends EventEmitter {
       authToken.data.toString() === this._incomingAuthToken
 
     if (!isValidAndAuthorized) {
-      debug(`responding to invalid auth token: ${authToken}`)
+      this.debug(`responding to invalid auth token: ${authToken}`)
       await _send(socketData.socket, btpPacket.serializeError({
         code: 'F00',
         name: 'NotAcceptedError',
@@ -205,9 +205,9 @@ module.exports = class BtpRpc extends EventEmitter {
       return
     }
 
-    await _send(socket, btpPacket.serializeResponse(requestId, result || []))
+    await _send(socketData.socket, btpPacket.serializeResponse(requestId, []))
     socketData.authenticated = true
-    debug('authenticated socket #' + socketIndex)
+    this.debug('authenticated socket #' + socketIndex)
   }
 
   async _call (id, data) {

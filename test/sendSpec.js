@@ -28,12 +28,12 @@ const info = {
 const peerAddress = 'example.red.client'
 const options = {
   prefix: 'example.red.',
-  token: 'placeholder',
+  secret: 'placeholder',
   currencyCode: 'USD',
   currencyScale: 2,
   maxBalance: '1000000',
   minBalance: '-40',
-  rpcUri: 'https://example.com/rpc',
+  server: 'btp+https://example.com/rpc',
   info: info
 }
 
@@ -42,8 +42,12 @@ describe('Send', () => {
     options._store = new ObjStore()
     this.plugin = new PluginPaymentChannel(options)
 
+    this.mockSocketIndex = 0
     this.mockSocket = new MockSocket()
-    this.plugin.addSocket(this.mockSocket)
+    this.mockSocket
+      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
+
+    yield this.plugin.addSocket(this.mockSocket, 'placeholder')
     yield this.plugin.connect()
 
     this.error = {
@@ -151,7 +155,7 @@ describe('Send', () => {
 
       const btpMessage = btpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield this.plugin._rpc.handleMessage(this.mockSocket, btpMessage)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, btpMessage)
 
       yield incoming
       yield outgoing
@@ -177,7 +181,7 @@ describe('Send', () => {
 
       const btpMessage = btpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield this.plugin._rpc.handleMessage(this.mockSocket, btpMessage)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, btpMessage)
     })
 
     it('should throw an error if a handler is already registered', function * () {
@@ -201,7 +205,7 @@ describe('Send', () => {
 
       const btpMessage = btpPacket.serializeMessage(1111,
         ilpAndCustomToProtocolData(this.message))
-      yield expect(this.plugin._rpc.handleMessage(this.mockSocket, btpMessage))
+      yield expect(this.plugin._rpc.handleMessage(this.mockSocketIndex, btpMessage))
         .to.be.rejectedWith(/no request handler registered/)
     })
 
@@ -319,7 +323,7 @@ describe('Send', () => {
 
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE)
 
-      yield this.plugin._rpc.handleMessage(this.mockSocket, this.btpTransfer)
+      yield this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpTransfer)
       yield received
     })
 
@@ -343,8 +347,8 @@ describe('Send', () => {
       yield this.plugin.sendTransfer(this.transfer)
       yield this.plugin.sendTransfer(transfer2)
 
-      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
-      const send2 = this.plugin._rpc.handleMessage(this.mockSocket, fulfillment2)
+      const send1 = this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
+      const send2 = this.plugin._rpc.handleMessage(this.mockSocketIndex, fulfillment2)
 
       yield Promise.all([ send1, send2 ])
       assert.equal(yield this.plugin.getBalance(), '-10',
@@ -365,8 +369,8 @@ describe('Send', () => {
       yield this.plugin.sendTransfer(this.transfer)
       yield this.plugin.sendTransfer(this.transfer)
 
-      const send1 = this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
-      const send2 = this.plugin._rpc.handleMessage(this.mockSocket, this.btpFulfillment)
+      const send1 = this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
+      const send2 = this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
         .catch((e) => {})
 
       yield Promise.all([ send1, send2 ])

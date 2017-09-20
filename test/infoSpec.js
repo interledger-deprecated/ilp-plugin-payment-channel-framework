@@ -19,20 +19,24 @@ const info = {
 
 const options = {
   prefix: 'example.red.',
-  token: 'placeholder',
+  secret: 'placeholder',
   maxBalance: '1000000',
-  rpcUri: 'https://example.com/rpc',
+  server: 'btp+https://example.com/rpc',
   info: info
 }
 
 describe('Info', () => {
-  beforeEach(function * () {
+  beforeEach(async function () {
     options._store = new ObjStore()
     this.plugin = new PluginPaymentChannel(options)
 
+    this.mockSocketIndex = 0
     this.mockSocket = new MockSocket()
-    this.plugin.addSocket(this.mockSocket)
-    yield this.plugin.connect()
+    this.mockSocket
+      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
+
+    await this.plugin.addSocket(this.mockSocket, 'placeholder')
+    await this.plugin.connect()
   })
 
   afterEach(async function () {
@@ -70,9 +74,9 @@ describe('Info', () => {
 
     it('handles getLimit requests', function * () {
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
-        const {custom} = protocolDataToIlpAndCustom(data)
-        assert(custom.get_limit)
-        assert(custom.get_limit, options.maxBalance)
+        const {protocolMap} = protocolDataToIlpAndCustom(data)
+        assert(protocolMap.get_limit)
+        assert(protocolMap.get_limit, options.maxBalance)
       })
 
       const getLimitReq = btpPacket.serializeMessage(12345, [{
