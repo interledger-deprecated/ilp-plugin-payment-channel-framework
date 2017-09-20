@@ -163,8 +163,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this.getPeerAccount = () => this._paychan.getPeerAccount(this._paychanContext)
       this._getAuthToken = () => this._paychan.getAuthToken(this._paychanContext)
     } else {
-      assertOptionType(opts, 'token', 'string')
-
       this._info = opts.info || null
       this._peerAccountName = this._stateful ? 'client' : 'server'
       this._accountName = this._stateful ? 'server' : 'client'
@@ -264,13 +262,17 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.debug('requesting with plugin', message)
     const btpResponse = await this._rpc.message(ilpAndCustomToProtocolData(message))
 
-    const parsed = protocolDataToIlpAndCustom(btpResponse)
+    const { ilp, custom } = protocolDataToIlpAndCustom(btpResponse)
+    const parsed = {
+      to: this.getAccount(),
+      from: this.getPeerAccount(),
+      ledger: this._prefix
+    }
 
-    parsed.to = this.getAccount()
-    parsed.from = this.getPeerAccount()
-    parsed.ledger = this._prefix
+    if (ilp) parsed.ilp = ilp
+    if (custom) parsed.custom = custom
+
     this._validator.validateIncomingMessage(parsed)
-
     this._safeEmit('incoming_response', parsed)
 
     return parsed
@@ -278,13 +280,14 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async _handleRequest ({requestId, data}) {
     const { ilp, custom, protocolMap } = protocolDataToIlpAndCustom(data)
-    const message = Object.assign({
+    const message = {
       id: requestId,
       to: this.getAccount(),
-      from: this.getPeerAccount(),
-      ilp,
-      custom
-    })
+      from: this.getPeerAccount()
+    }
+
+    if (ilp) message.ilp = ilp
+    if (custom) message.custom = custom
 
     // if there are side protocols only
     if (!ilp) {
@@ -367,18 +370,19 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async _handleTransfer ({data}) {
-    const { ilp, custom, protocolMap } = protocolDataToIlpAndCustom(data)
-    const transfer = Object.assign({
+    const { ilp, custom } = protocolDataToIlpAndCustom(data)
+    const transfer = {
       id: data.id,
       amount: data.amount,
       executionCondition: data.executionCondition,
       expiresAt: data.expiresAt.toISOString(),
       to: this.getAccount(),
       from: this.getPeerAccount(),
-      ledger: this._prefix,
-      ilp,
-      custom
-    })
+      ledger: this._prefix
+    }
+
+    if (ilp) transfer.ilp = ilp
+    if (custom) transfer.custom = custom
 
     this._validator.validateIncomingTransfer(transfer)
     await this._transfers.prepare(transfer, true)
