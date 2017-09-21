@@ -83,18 +83,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     if (opts.server) {
       assertOptionType(opts, 'server', 'string')
 
-      // token can be provided via the URL
-      // e.g. btp+wss://:token@host.example:1234/path
-      const parsed = url.parse(opts.server)
-      if (parsed.auth) {
-        const [, token] = parsed.auth.split(':')
-        opts.token = token
-
-        // remove token from url
-        parsed.auth = null
-        opts.server = url.format(parsed)
-      }
-
       this._client = new BtpClient({
         server: opts.server,
         secret: opts.secret,
