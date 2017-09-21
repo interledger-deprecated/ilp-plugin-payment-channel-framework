@@ -5,6 +5,7 @@ const crypto = require('crypto')
 
 // TODO: make it configurable
 const DEFAULT_TIMEOUT = 5000
+const DEFAULT_AUTH_TIMEOUT = 2000
 const namesToCodes = {
   'UnreachableError': 'T00',
   'NotAcceptedError': 'F00',
@@ -97,6 +98,15 @@ module.exports = class BtpRpc extends EventEmitter {
 
         this.once('_' + requestId, handleAuthResponse)
       })
+    // if the socket isn't a client, we have to start a timeout
+    // after which it must send authentication.
+    } else {
+      setTimeout(() => {
+        if (!this._sockets[newSocketIndex].authenticated) {
+          this.debug('timing out socket #' + newSocketIndex)
+          this._deleteSocket(newSocketIndex)
+        }
+      }, DEFAULT_AUTH_TIMEOUT)
     }
   }
 
@@ -108,16 +118,17 @@ module.exports = class BtpRpc extends EventEmitter {
     const socketData = this._sockets[socketIndex]
     _assertSocket(socketData)
 
+    if (!socketData.authorized) {
+      // authentication handling must be done inside of the RPC module because
+      // it happens on a per-socket basis rather than per plugin.
+      this._handleAuth(socketIndex, message)
+      return
+    }
+
     const socket = socketData.socket
     const {type, requestId, data} = btpPacket.deserialize(message)
     const typeString = btpPacket.typeToString(type)
 
-    if (!socketData.authorized) {
-      // authentication handling must be done inside of the RPC module because
-      // it happens on a per-socket basis rather than per plugin.
-      this._handleAuth(socketIndex, { type, requestId, data })
-      return
-    }
 
     if (data.transferId) {
       data.id = data.transferId
@@ -154,55 +165,63 @@ module.exports = class BtpRpc extends EventEmitter {
     }
   }
 
+  // helper for handling authentication errors
+  async _sendInvalidFieldsError(socket, requestId, message) {
+    await _send(socket, btpPacket.serializeError({
+      code: 'F01',
+      name: 'InvalidFieldsError',
+      triggeredAt: new Date(),
+      data: JSON.stringify({ message })
+    }, requestId, []))
+  }
+
+  _deleteSocket (socketIndex) {
+    this.sockets[socketIndex].socket.close()
+    // rather than splicing the socket out of the array of sockets
+    // and causing all indices to be invalid, we just treat the
+    // array like a map and delete the value corresponding to the
+    // key that is index.
+    delete this.sockets[socketIndex]
+  }
+
   // authentication handling must be done in the RPC, because it's done
   // on a per-socket basis rather than a per-plugin basis.
-  async _handleAuth (socketIndex, { type, requestId, data }) {
+  async _handleAuth (socketIndex, message) {
     const socketData = this._sockets[socketIndex]
+    const {type, requestId, data} = btpPacket.deserialize(message)
     this.debug('authenticating socket #' + socketIndex)
 
     if (type !== btpPacket.TYPE_MESSAGE) {
       this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
-      await _send(socketData.socket, btpPacket.serializeError({
-        code: 'F01',
-        name: 'InvalidFieldsError',
-        triggeredAt: new Date(),
-        data: JSON.stringify({ message: 'invalid method on unauthenticated socket' })
-      }, requestId, []))
+      await this._sendInvalidFieldsError(socketData.socket, requestId,
+        'invalid method on unauthenticated socket')
+      this._deleteSocket(socketIndex)
       return
     }
 
     if (data.protocolData[0].protocolName !== 'auth') {
       this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
-      await _send(socketData.socket, btpPacket.serializeError({
-        code: 'F01',
-        name: 'InvalidFieldsError',
-        triggeredAt: new Date(),
-        data: JSON.stringify({ message: 'auth must be primary protocol on unauthenticated message' })
-      }, requestId, []))
+      await this._sendInvalidFieldsError(socketData.socket, requestId,
+        'auth must be primary protocol on unauthenticated message')
+      this._deleteSocket(socketIndex)
       return
     }
 
     const [ authToken ] = data.protocolData.filter(p => p.protocolName === 'auth_token')
     if (!authToken) {
       this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
-      await _send(socketData.socket, btpPacket.serializeError({
-        code: 'F01',
-        name: 'InvalidFieldsError',
-        triggeredAt: new Date(),
-        data: JSON.stringify({ message: 'missing "auth_token" secondary protocol' })
-      }, requestId, []))
+      await _sendInvalidFieldsError(socketData.socket, requestId,
+        'missing "auth_token" secondary protocol')
+      this._deleteSocket(socketIndex)
       return
     }
 
     const [ authUsername ] = data.protocolData.filter(p => p.protocolName === 'auth_username')
     if (!authToken) {
       this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
-      await _send(socketData.socket, btpPacket.serializeError({
-        code: 'F01',
-        name: 'InvalidFieldsError',
-        triggeredAt: new Date(),
-        data: JSON.stringify({ message: 'missing "auth_username" secondary protocol' })
-      }, requestId, []))
+      await _sendInvalidFieldsError(socketData.socket, requestId,
+        'missing "auth_username" secondary protocol')
+      this._deleteSocket(socketIndex)
       return
     }
 
@@ -220,6 +239,7 @@ module.exports = class BtpRpc extends EventEmitter {
         triggeredAt: new Date(),
         data: JSON.stringify({ message: 'invalid auth token and/or username' })
       }, requestId, []))
+      this._deleteSocket(socketIndex)
       return
     }
 
