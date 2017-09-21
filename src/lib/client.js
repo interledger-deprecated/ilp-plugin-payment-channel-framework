@@ -6,19 +6,24 @@ const debug = require('debug')('ilp-plugin-payment-channel-framework:client')
 const { URL } = require('url')
 
 module.exports = class BtpClient {
-  constructor ({ server, secret, plugin, insecure }) {
-    this._server = server
+  constructor ({ btpUri, plugin }) {
     this._plugin = plugin
 
-    // The server URI must follow the format: btp+wss://host:port/path
-    const parsedServer = new URL(server)
-    assert(parsedServer.protocol.startsWith('btp+'), 'server uri must start with "btp+"')
-    this._wsUri = (insecure ? 'ws://' : 'wss://') + parsedServer.host + parsedServer.path
-    this._secret = (parsedServer.auth && parsedServer.auth.split(':')[1]) || secret
-
-    if (!secret) {
-      throw new Error('secret must be provided to BTP Client in the URL or in the configuration')
-    }
+    // The BTP URI must follow one of the following formats:
+    // btp+wss://auth_username:auth_token@host:port/path
+    // btp+wss://auth_username:auth_token@host/path
+    // btp+ws://auth_username:auth_token@host:port/path
+    // btp+ws://auth_username:auth_token@host/path
+    // See also: https://github.com/interledger/rfcs/pull/300
+    const parsedBtpUri = new URL(btpUri)
+    this._authUsername = parsedBtpUri.username
+    this._authToken = parsedBtpUri.password
+    parsedBtpUri.username = ''
+    parsedBtpUri.password = ''
+    // Note that setting the parsedBtpUri.protocol does not work as expected,
+    // so removing the 'btp+' prefix from the full URL here:
+    assert(parsedBtpUri.toString().startsWith('btp+'), 'server uri must start with "btp+"')
+    this._wsUri = parsedBtpUri.toString().substring('btp+'.length)
   }
 
   async connect () {
@@ -27,7 +32,7 @@ module.exports = class BtpClient {
 
     return new Promise((resolve, reject) => {
       ws.on('open', async () => {
-        await this._plugin.addSocket(ws, this._secret)
+        await this._plugin.addSocket(ws, this._authUsername, this._authToken)
         resolve()
       })
 

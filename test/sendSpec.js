@@ -28,12 +28,11 @@ const info = {
 const peerAddress = 'example.red.client'
 const options = {
   prefix: 'example.red.',
-  secret: 'placeholder',
   currencyCode: 'USD',
   currencyScale: 2,
   maxBalance: '1000000',
   minBalance: '-40',
-  server: 'btp+https://example.com/rpc',
+  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
   info: info
 }
 
@@ -47,7 +46,7 @@ describe('Send', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
 
-    yield this.plugin.addSocket(this.mockSocket, 'placeholder')
+    yield this.plugin.addSocket(this.mockSocket, 'user', 'placeholder')
     yield this.plugin.connect()
 
     this.error = {
