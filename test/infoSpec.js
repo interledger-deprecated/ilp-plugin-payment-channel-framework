@@ -19,9 +19,8 @@ const info = {
 
 const options = {
   prefix: 'example.red.',
-  secret: 'placeholder',
   maxBalance: '1000000',
-  server: 'btp+https://example.com/rpc',
+  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
   info: info
 }
 
@@ -35,7 +34,7 @@ describe('Info', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
 
-    await this.plugin.addSocket(this.mockSocket, 'placeholder')
+    await this.plugin.addSocket(this.mockSocket, 'user', 'placeholder')
     await this.plugin.connect()
   })
 
