@@ -60,6 +60,12 @@ describe('Asymmetric plugin virtual', () => {
   })
 
   describe('setup', () => {
+    it('should parse the BTP URI correctly', function () {
+      assert.equal(this.plugin._client._wsUri, 'wss://example.com/rpc')
+      assert.equal(this.plugin._client._authUsername, 'user')
+      assert.equal(this.plugin._client._authToken, 'placeholder')
+    })
+
     it('should get info from rpc endpoint', function () {
       assert.deepEqual(this.plugin.getInfo(), info)
     })
