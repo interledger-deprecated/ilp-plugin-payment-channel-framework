@@ -2,7 +2,6 @@
 
 const EventEmitter2 = require('eventemitter2')
 const crypto = require('crypto')
-const url = require('url')
 const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
