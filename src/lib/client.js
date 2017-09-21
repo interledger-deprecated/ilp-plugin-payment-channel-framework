@@ -3,7 +3,7 @@
 const assert = require('assert')
 const WebSocket = require('ws')
 const debug = require('debug')('ilp-plugin-payment-channel-framework:client')
-const url = require('url')
+const { URL } = require('url')
 
 module.exports = class BtpClient {
   constructor ({ server, secret, plugin, insecure }) {
@@ -11,8 +11,7 @@ module.exports = class BtpClient {
     this._plugin = plugin
 
     // The server URI must follow the format: btp+wss://host:port/path
-    // See also: https://github.com/interledger/interledger/wiki/Interledger-over-BTP
-    const parsedServer = url.parse(server)
+    const parsedServer = new URL(server)
     assert(parsedServer.protocol.startsWith('btp+'), 'server uri must start with "btp+"')
     this._wsUri = (insecure ? 'ws://' : 'wss://') + parsedServer.host + parsedServer.path
     this._secret = (parsedServer.auth && parsedServer.auth.split(':')[1]) || secret
