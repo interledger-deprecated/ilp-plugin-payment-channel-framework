@@ -80,25 +80,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._requestHandler = null
     this._sideProtoHandler = {}
 
-    if (opts.server) {
-      assertOptionType(opts, 'server', 'string')
-
-      // token can be provided via the URL
-      // e.g. btp+wss://:token@host.example:1234/path
-      const parsed = url.parse(opts.server)
-      if (parsed.auth) {
-        const [, token] = parsed.auth.split(':')
-        opts.token = token
-
-        // remove token from url
-        parsed.auth = null
-        opts.server = url.format(parsed)
-      }
-
+    if (opts.btpUri) {
+      assertOptionType(opts, 'btpUri', 'string')
       this._client = new BtpClient({
-        server: opts.server,
-        secret: opts.secret,
-        insecure: opts.insecure,
+        btpUri: opts.btpUri,
         plugin: this
       })
     } else {
@@ -120,8 +105,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._listener = null
     }
 
-    if (!opts.server && !opts.listener) {
-      throw new Error('plugin must be configured either as a client (in which case you need to provide a \'server\' in the config) or as a server (in which case you need to provide a \'listener\' config)')
+    if (!opts.btpUri && !opts.listener) {
+      throw new Error('plugin must be configured either as a client (in which case you need to provide a \'btpUri\' in the config) or as a server (in which case you need to provide a \'listener\' config)')
     }
 
     // register RPC methods
@@ -140,7 +125,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       incomingAuthToken: opts.incomingSecret
     })
 
-    if (!opts.server && !(opts.prefix && opts.info)) {
+    if (!opts.btpUri && !(opts.prefix && opts.info)) {
       throw new Error('when running in server mode, the \'prefix\' and \'info\' config parameters are required')
     }
 

@@ -47,7 +47,7 @@ module.exports = class BtpRpc extends EventEmitter {
     this.debug = debug
   }
 
-  async addSocket (socket, authToken) {
+  async addSocket (socket, authUsername, authToken) {
     const newSocketIndex = this._sockets.length
     const isClient = Boolean(authToken)
     _assertSocket({ socket, authorized: isClient })
@@ -75,13 +75,13 @@ module.exports = class BtpRpc extends EventEmitter {
         contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
         data: Buffer.from([])
       }, {
+        protocolName: 'auth_username',
+        contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
+        data: Buffer.from(authUsername, 'utf8')
+      }, {
         protocolName: 'auth_token',
         contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
         data: Buffer.from(authToken, 'utf8')
-      }, {
-        protocolName: 'auth_username',
-        contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from('', 'utf8')
       }]))
 
       return new Promise((resolve, reject) => {

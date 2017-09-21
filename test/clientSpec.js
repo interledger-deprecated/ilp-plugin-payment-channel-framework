@@ -33,8 +33,7 @@ const info = {
 
 const peerAddress = 'example.red.server'
 const options = {
-  secret: 'placeholder',
-  server: 'btp+https://example.com/rpc'
+  btpUri: 'btp+wss://user:placeholder@example.com/rpc'
 }
 
 describe('Asymmetric plugin virtual', () => {
@@ -52,7 +51,7 @@ describe('Asymmetric plugin virtual', () => {
     this.plugin = new PluginPaymentChannel(Object.assign({},
       options))
 
-    await this.plugin.addSocket(this.mockSocket, 'placeholder')
+    await this.plugin.addSocket(this.mockSocket, 'user', 'placeholder')
     await this.plugin.connect()
   })
 
