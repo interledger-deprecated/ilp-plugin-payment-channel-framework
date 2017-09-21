@@ -7,9 +7,8 @@ const getObjBackend = require('../src/util/backend')
 const PluginPaymentChannel = require('..')
 const options = {
   prefix: 'example.red.',
-  secret: 'placeholder',
   maxBalance: '1000',
-  server: 'btp+https://example.com/rpc',
+  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
   _backend: getObjBackend(null)
 }
 

@@ -29,10 +29,9 @@ describe('makePaymentChannelPlugin', function () {
     }
 
     this.opts = {
-      secret: 'seeecret',
       maxBalance: '1000000',
       minBalance: '-40',
-      server: 'btp+https://example.com/rpc',
+      btpUri: 'btp+wss://user:seeecret@example.com/rpc',
       info: this.info,
       _store: new ObjStore()
     }
@@ -96,7 +95,7 @@ describe('makePaymentChannelPlugin', function () {
         data: Buffer.from(JSON.stringify(this.info))
       }]))
 
-    await this.plugin.addSocket(this.mockSocket, 'password')
+    await this.plugin.addSocket(this.mockSocket, 'user', 'password')
     await this.plugin.connect()
   })
 
