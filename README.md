@@ -43,7 +43,7 @@ CONNECTOR_LEDGERS={
         key: '/tmp/snakeoil.key',
         ca: '/tmp/snakeoil-ca.crt'
       },
-      "token": "shared_secret", // shared secret between server and client
+      "token": "shared_secret", // auth_token which the server expects the client to send
       // the server determines the properties of the trustline
       "maxBalance": "1000000000",
       "prefix": "g.eur.mytrustline.",
@@ -71,8 +71,7 @@ CONNECTOR_LEDGERS={
     "currency": "EUR",
     "plugin": "ilp-plugin-payment-channel-framework",
     "options": {
-      "server": "btp+wss://wallet1.example:1234/example_path",
-      "token": "shared_secret"
+      "btpUri": "btp+wss://username:shared_secret@wallet1.example:1234/example_path"
     },
     "store": false
   }
