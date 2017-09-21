@@ -27,9 +27,8 @@ const info = {
 const peerAddress = 'example.red.client'
 const options = {
   prefix: 'example.red.',
-  secret: 'placeholder',
   maxBalance: '10',
-  server: 'btp+https://example.com/rpc',
+  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
   info: info
 }
 
@@ -85,7 +84,7 @@ describe('Conditional Transfers', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
 
-    yield this.plugin.addSocket(this.mockSocket, 'placeholder')
+    yield this.plugin.addSocket(this.mockSocket, 'user', 'placeholder')
     yield this.plugin.connect()
   })
 
