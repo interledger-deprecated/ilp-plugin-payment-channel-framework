@@ -28,7 +28,7 @@ const peerAddress = 'example.red.client'
 const options = {
   prefix: 'example.red.',
   maxBalance: '10',
-  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
+  server: 'btp+wss://user:placeholder@example.com/rpc',
   info: info
 }
 

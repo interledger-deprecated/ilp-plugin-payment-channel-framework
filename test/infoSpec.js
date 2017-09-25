@@ -20,7 +20,7 @@ const info = {
 const options = {
   prefix: 'example.red.',
   maxBalance: '1000000',
-  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
+  server: 'btp+wss://user:placeholder@example.com/rpc',
   info: info
 }
 
