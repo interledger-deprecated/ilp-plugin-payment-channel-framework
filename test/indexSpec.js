@@ -8,7 +8,7 @@ const PluginPaymentChannel = require('..')
 const options = {
   prefix: 'example.red.',
   maxBalance: '1000',
-  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
+  server: 'btp+wss://user:placeholder@example.com/rpc',
   _backend: getObjBackend(null)
 }
 

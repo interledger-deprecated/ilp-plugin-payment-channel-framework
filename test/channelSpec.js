@@ -31,7 +31,7 @@ describe('makePaymentChannelPlugin', function () {
     this.opts = {
       maxBalance: '1000000',
       minBalance: '-40',
-      btpUri: 'btp+wss://user:seeecret@example.com/rpc',
+      server: 'btp+wss://user:seeecret@example.com/rpc',
       info: this.info,
       _store: new ObjStore()
     }

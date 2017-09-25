@@ -6,7 +6,7 @@ const debug = require('debug')('ilp-plugin-payment-channel-framework:client')
 const { URL } = require('url')
 
 module.exports = class BtpClient {
-  constructor ({ btpUri, plugin }) {
+  constructor ({ server, plugin }) {
     this._plugin = plugin
 
     // The BTP URI must follow one of the following formats:
@@ -15,7 +15,7 @@ module.exports = class BtpClient {
     // btp+ws://auth_username:auth_token@host:port/path
     // btp+ws://auth_username:auth_token@host/path
     // See also: https://github.com/interledger/rfcs/pull/300
-    const parsedBtpUri = new URL(btpUri)
+    const parsedBtpUri = new URL(server)
     this._authUsername = parsedBtpUri.username
     this._authToken = parsedBtpUri.password
     parsedBtpUri.username = ''

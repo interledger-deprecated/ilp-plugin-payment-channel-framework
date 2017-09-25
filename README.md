@@ -71,7 +71,7 @@ CONNECTOR_LEDGERS={
     "currency": "EUR",
     "plugin": "ilp-plugin-payment-channel-framework",
     "options": {
-      "btpUri": "btp+wss://username:shared_secret@wallet1.example:1234/example_path"
+      "server": "btp+wss://username:shared_secret@wallet1.example:1234/example_path"
     },
     "store": false
   }
