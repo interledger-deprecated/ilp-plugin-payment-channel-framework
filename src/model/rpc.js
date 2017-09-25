@@ -134,7 +134,6 @@ module.exports = class BtpRpc extends EventEmitter {
     const {type, requestId, data} = btpPacket.deserialize(message)
     const typeString = btpPacket.typeToString(type)
 
-
     if (data.transferId) {
       data.id = data.transferId
       delete data.transferId
@@ -171,7 +170,7 @@ module.exports = class BtpRpc extends EventEmitter {
   }
 
   // helper for handling authentication errors
-  async _sendInvalidFieldsError(socket, requestId, message) {
+  async _sendInvalidFieldsError (socket, requestId, message) {
     await _send(socket, btpPacket.serializeError({
       code: 'F01',
       name: 'InvalidFieldsError',
