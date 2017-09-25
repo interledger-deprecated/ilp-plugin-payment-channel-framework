@@ -93,7 +93,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         plugin: this,
         socket: opts.socket
       })
-      this._listener.listen()
     } else {
       this._listener = null
     }
@@ -199,6 +198,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async connect () {
+    if (this._listener) {
+      this._listener.listen()
+    }
+
     if (!(this._info && this._prefix)) {
       this.debug('info not available locally, loading remotely')
       const btpResponse = await this._rpc.message(
