@@ -101,6 +101,8 @@ class MockSocket extends EventEmitter {
 
     return this.processed
   }
+
+  close () {}
 }
 
 module.exports = MockSocket
