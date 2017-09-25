@@ -34,7 +34,7 @@ describe('Info', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
 
-    await this.plugin.addSocket(this.mockSocket, 'user', 'placeholder')
+    await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'placeholder' })
     await this.plugin.connect()
   })
 

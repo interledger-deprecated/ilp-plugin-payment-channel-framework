@@ -48,16 +48,20 @@ module.exports = class BtpRpc extends EventEmitter {
     this.debug = debug
   }
 
-  async addSocket (socket, authUsername, authToken) {
+  async addSocket (socket, auth) {
     const newSocketIndex = this._sockets.length
-    const isClient = Boolean(authToken)
-    _assertSocket({ socket, authorized: isClient })
+    const weAreClient = Boolean(auth)
+    if (weAreClient) {
+      assert(typeof auth.username, 'string', 'auth.username should be a string (but empty string is allowed')
+      assert(typeof auth.token, 'string', 'auth.token should be a string (but empty string is allowed')
+    }
+    _assertSocket({ socket, authorized: weAreClient })
 
     this.debug('adding socket')
 
     // if we're the client on this socket, we don't need to receive
     // any authentication data. we have to send it instead.
-    this._sockets.push({ socket, authorized: isClient })
+    this._sockets.push({ socket, authorized: weAreClient })
     socket.on('message', async (message) => {
       this.debug('got message:', Buffer.from(message).toString('hex'))
       try {
@@ -69,7 +73,7 @@ module.exports = class BtpRpc extends EventEmitter {
 
     // if this is a client, then send a special request with which to
     // authenticate.
-    if (isClient) {
+    if (weAreClient) {
       const requestId = await _requestId()
       await _send(socket, btpPacket.serializeMessage(requestId, [{
         protocolName: 'auth',
@@ -78,11 +82,11 @@ module.exports = class BtpRpc extends EventEmitter {
       }, {
         protocolName: 'auth_username',
         contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from(authUsername, 'utf8')
+        data: Buffer.from(auth.username, 'utf8')
       }, {
         protocolName: 'auth_token',
         contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from(authToken, 'utf8')
+        data: Buffer.from(auth.token, 'utf8')
       }]))
 
       return new Promise((resolve, reject) => {
