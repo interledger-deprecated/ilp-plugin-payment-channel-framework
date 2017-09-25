@@ -52,16 +52,16 @@ module.exports = class BtpRpc extends EventEmitter {
     const newSocketIndex = this._sockets.length
     const weAreClient = Boolean(auth)
     if (weAreClient) {
-      assert(typeof auth.username, 'string', 'auth.username should be a string (but empty string is allowed')
-      assert(typeof auth.token, 'string', 'auth.token should be a string (but empty string is allowed')
+      assert(typeof auth.username === 'string', 'auth.username should be a string (but empty string is allowed')
+      assert(typeof auth.token === 'string', 'auth.token should be a string (but empty string is allowed')
     }
-    _assertSocket({ socket, authorized: weAreClient })
+    _assertSocket({ socket, authenticated: weAreClient })
 
-    this.debug('adding socket')
+    this.debug('adding socket to a', weAreClient ? 'server' : 'client')
 
     // if we're the client on this socket, we don't need to receive
     // any authentication data. we have to send it instead.
-    this._sockets.push({ socket, authorized: weAreClient })
+    this._sockets.push({ socket, authenticated: weAreClient })
     socket.on('message', async (message) => {
       this.debug('got message:', Buffer.from(message).toString('hex'))
       try {
@@ -106,7 +106,8 @@ module.exports = class BtpRpc extends EventEmitter {
     // after which it must send authentication.
     } else {
       setTimeout(() => {
-        if (!this._sockets[newSocketIndex].authenticated) {
+        const socketData = this._sockets[newSocketIndex]
+        if (socketData && !socketData.authenticated) {
           this.debug('timing out socket #' + newSocketIndex)
           this._deleteSocket(newSocketIndex)
         }
@@ -122,7 +123,7 @@ module.exports = class BtpRpc extends EventEmitter {
     const socketData = this._sockets[socketIndex]
     _assertSocket(socketData)
 
-    if (!socketData.authorized) {
+    if (!socketData.authenticated) {
       // authentication handling must be done inside of the RPC module because
       // it happens on a per-socket basis rather than per plugin.
       this._handleAuth(socketIndex, message)
@@ -180,12 +181,12 @@ module.exports = class BtpRpc extends EventEmitter {
   }
 
   _deleteSocket (socketIndex) {
-    this.sockets[socketIndex].socket.close()
+    this._sockets[socketIndex].socket.close()
     // rather than splicing the socket out of the array of sockets
     // and causing all indices to be invalid, we just treat the
     // array like a map and delete the value corresponding to the
     // key that is index.
-    delete this.sockets[socketIndex]
+    delete this._sockets[socketIndex]
   }
 
   // authentication handling must be done in the RPC, because it's done
@@ -231,7 +232,7 @@ module.exports = class BtpRpc extends EventEmitter {
 
     const isValidAndAuthorized =
       authUsername.contentType === btpPacket.MIME_TEXT_PLAIN_UTF8 &&
-      authToken.data.toString() === '' &&
+      authUsername.data.toString() === '' &&
       authToken.contentType === btpPacket.MIME_TEXT_PLAIN_UTF8 &&
       authToken.data.toString() === this._incomingAuthToken
 
@@ -264,7 +265,7 @@ module.exports = class BtpRpc extends EventEmitter {
 
     this.debug('sending ', Buffer.from(data).toString('hex'))
     await Promise.all(this._sockets.map(async (socketData) =>
-      socketData.authorized && _send(socketData.socket, data)))
+      socketData.authenticated && _send(socketData.socket, data)))
 
     let callback
     const response = new Promise((resolve, reject) => {
