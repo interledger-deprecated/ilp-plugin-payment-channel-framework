@@ -2,7 +2,6 @@
 
 const EventEmitter2 = require('eventemitter2')
 const crypto = require('crypto')
-const url = require('url')
 const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
@@ -23,9 +22,6 @@ const InvalidFieldsError = errors.InvalidFieldsError
 const AlreadyRejectedError = errors.AlreadyRejectedError
 const AlreadyFulfilledError = errors.AlreadyFulfilledError
 const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegisteredError
-
-// TODO: What should the default port be?
-const DEFAULT_PORT = 4195
 
 const assertOptionType = (opts, field, type) => {
   const val = opts[field]
@@ -90,23 +86,19 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._client = null
     }
 
-    if (opts.listener) {
-      assertOptionType(opts, 'listener', 'object')
+    if (opts.socket) {
+      assertOptionType(opts, 'socket', 'object')
 
       this._listener = new BtpListener({
         plugin: this,
-        port: opts.listener.port || DEFAULT_PORT,
-        cert: opts.listener.cert,
-        key: opts.listener.key,
-        ca: opts.listener.ca
+        socket: opts.socket
       })
-      this._listener.listen()
     } else {
       this._listener = null
     }
 
-    if (!opts.btpUri && !opts.listener) {
-      throw new Error('plugin must be configured either as a client (in which case you need to provide a \'btpUri\' in the config) or as a server (in which case you need to provide a \'listener\' config)')
+    if (!opts.btpUri && !opts.socket) {
+      throw new Error('plugin must be configured either as a client (in which case you need to provide a \'btpUri\' in the config) or as a server connection (in which case you need to provide a \'socket\' config)')
     }
 
     // register RPC methods
@@ -206,6 +198,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async connect () {
+    if (this._listener) {
+      this._listener.listen()
+    }
+
     if (!(this._info && this._prefix)) {
       this.debug('info not available locally, loading remotely')
       const btpResponse = await this._rpc.message(
