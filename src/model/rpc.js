@@ -204,7 +204,7 @@ module.exports = class BtpRpc extends EventEmitter {
       return
     }
 
-    if (data.protocolData[0].protocolName !== 'auth') {
+    if (!data.protocolData.length || data.protocolData[0].protocolName !== 'auth') {
       this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
       await this._sendInvalidFieldsError(socketData.socket, requestId,
         'auth must be primary protocol on unauthenticated message')
@@ -215,16 +215,16 @@ module.exports = class BtpRpc extends EventEmitter {
     const [ authToken ] = data.protocolData.filter(p => p.protocolName === 'auth_token')
     if (!authToken) {
       this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
-      await _sendInvalidFieldsError(socketData.socket, requestId,
+      await this._sendInvalidFieldsError(socketData.socket, requestId,
         'missing "auth_token" secondary protocol')
       this._deleteSocket(socketIndex)
       return
     }
 
     const [ authUsername ] = data.protocolData.filter(p => p.protocolName === 'auth_username')
-    if (!authToken) {
+    if (!authUsername) {
       this.debug(`responding to invalid auth request: ${JSON.stringify(data)}`)
-      await _sendInvalidFieldsError(socketData.socket, requestId,
+      await this._sendInvalidFieldsError(socketData.socket, requestId,
         'missing "auth_username" secondary protocol')
       this._deleteSocket(socketIndex)
       return
