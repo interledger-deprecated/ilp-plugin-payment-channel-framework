@@ -32,7 +32,7 @@ const options = {
   currencyScale: 2,
   maxBalance: '1000000',
   minBalance: '-40',
-  btpUri: 'btp+wss://user:placeholder@example.com/rpc',
+  server: 'btp+wss://user:placeholder@example.com/rpc',
   info: info
 }
 
