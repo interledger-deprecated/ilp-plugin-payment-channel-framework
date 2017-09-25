@@ -95,7 +95,7 @@ describe('makePaymentChannelPlugin', function () {
         data: Buffer.from(JSON.stringify(this.info))
       }]))
 
-    await this.plugin.addSocket(this.mockSocket, 'user', 'password')
+    await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'password' })
     await this.plugin.connect()
   })
 
