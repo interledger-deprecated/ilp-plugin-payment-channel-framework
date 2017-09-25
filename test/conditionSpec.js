@@ -84,7 +84,7 @@ describe('Conditional Transfers', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
 
-    yield this.plugin.addSocket(this.mockSocket, 'user', 'placeholder')
+    yield this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'placeholder' })
     yield this.plugin.connect()
   })
 

@@ -51,7 +51,7 @@ describe('Asymmetric plugin virtual', () => {
     this.plugin = new PluginPaymentChannel(Object.assign({},
       options))
 
-    await this.plugin.addSocket(this.mockSocket, 'user', 'placeholder')
+    await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'placeholder' })
     await this.plugin.connect()
   })
 
