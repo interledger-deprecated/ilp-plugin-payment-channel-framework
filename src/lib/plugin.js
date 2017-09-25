@@ -104,10 +104,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._listener = null
     }
 
-    if (!opts.server && !opts.listener) {
-      throw new Error('plugin must be configured either as a client (in which case you need to provide a \'server\' in the config) or as a server (in which case you need to provide a \'listener\' config)')
-    }
-
     // register RPC methods
     this._rpc = new BtpRpc({
       plugin: this,
