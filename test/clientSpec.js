@@ -33,7 +33,7 @@ const info = {
 
 const peerAddress = 'example.red.server'
 const options = {
-  btpUri: 'btp+wss://user:placeholder@example.com/rpc'
+  server: 'btp+wss://user:placeholder@example.com/rpc'
 }
 
 describe('Asymmetric plugin virtual', () => {
