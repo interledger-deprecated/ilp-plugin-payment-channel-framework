@@ -52,8 +52,8 @@ module.exports = class BtpRpc extends EventEmitter {
     const newSocketIndex = this._sockets.length
     const weAreClient = Boolean(auth)
     if (weAreClient) {
-      assert(typeof auth.username === 'string', 'auth.username should be a string (but empty string is allowed')
-      assert(typeof auth.token === 'string', 'auth.token should be a string (but empty string is allowed')
+      assert(typeof auth.username === 'string', 'auth.username should be a string (but empty string is allowed)')
+      assert(typeof auth.token === 'string', 'auth.token should be a string (but empty string is allowed)')
     }
     _assertSocket({ socket, authenticated: weAreClient })
 
