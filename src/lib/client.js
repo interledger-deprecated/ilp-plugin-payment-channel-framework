@@ -32,7 +32,7 @@ module.exports = class BtpClient {
 
     return new Promise((resolve, reject) => {
       ws.on('open', async () => {
-        await this._plugin.addSocket(ws, this._authUsername, this._authToken)
+        await this._plugin.addSocket(ws, { username: this._authUsername, token: this._authToken })
         resolve()
       })
 
