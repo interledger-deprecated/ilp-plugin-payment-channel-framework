@@ -144,6 +144,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._getAuthToken = () => this._paychan.getAuthToken(this._paychanContext)
     } else {
       this._info = opts.info || null
+      if (this._info) {
+        // autofill prefix from opts if info is specified and does not include prefix
+        this._info.prefix = this._info.prefix || opts.prefix
+      }
+
       this._peerAccountName = this._stateful ? 'client' : 'server'
       this._accountName = this._stateful ? 'server' : 'client'
       this._prefix = opts.prefix

@@ -136,34 +136,32 @@ describe('Info', () => {
       await this.plugin.addSocket(this.newSocket)
     })
 
+    afterEach(async function () {
+      assert(await this.newSocket.isDone(), 'request handlers must be complete')
+    })
+
     it('should deny an authentication request with wrong method', async function () {
       this.newSocket.emit('message', btpPacket.serializeFulfill({
         transferId: 'b38a5203-bdb8-f11f-db01-5a32cf1a4e43',
         fulfillment: 'Ndr_HMuLPPl0idUlvAXFXBVQTFOizq-nXozej0KIA7k'
       }, 100, []))
 
-      await new Promise((resolve) => {
-        this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
-          assert.equal(e.requestId, 100)
-          assert.equal(e.data.code, 'F01')
-          assert.equal(e.data.name, 'InvalidFieldsError')
-          assert.equal(e.data.data, '{"message":"invalid method on unauthenticated socket"}')
-          resolve()
-        })
+      this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
+        assert.equal(e.requestId, 100)
+        assert.equal(e.data.code, 'F01')
+        assert.equal(e.data.name, 'InvalidFieldsError')
+        assert.equal(e.data.data, '{"message":"invalid method on unauthenticated socket"}')
       })
     })
 
     it('should deny an authentication request with no "auth" protocol', async function () {
       this.newSocket.emit('message', btpPacket.serializeMessage(100, []))
 
-      await new Promise((resolve) => {
-        this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
-          assert.equal(e.requestId, 100)
-          assert.equal(e.data.code, 'F01')
-          assert.equal(e.data.name, 'InvalidFieldsError')
-          assert.equal(e.data.data, '{"message":"auth must be primary protocol on unauthenticated message"}')
-          resolve()
-        })
+      this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
+        assert.equal(e.requestId, 100)
+        assert.equal(e.data.code, 'F01')
+        assert.equal(e.data.name, 'InvalidFieldsError')
+        assert.equal(e.data.data, '{"message":"auth must be primary protocol on unauthenticated message"}')
       })
     })
 
@@ -174,14 +172,11 @@ describe('Info', () => {
         data: Buffer.from('')
       }]))
 
-      await new Promise((resolve) => {
-        this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
-          assert.equal(e.requestId, 100)
-          assert.equal(e.data.code, 'F01')
-          assert.equal(e.data.name, 'InvalidFieldsError')
-          assert.equal(e.data.data, '{"message":"missing \\"auth_token\\" secondary protocol"}')
-          resolve()
-        })
+      this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
+        assert.equal(e.requestId, 100)
+        assert.equal(e.data.code, 'F01')
+        assert.equal(e.data.name, 'InvalidFieldsError')
+        assert.equal(e.data.data, '{"message":"missing \\"auth_token\\" secondary protocol"}')
       })
     })
 
@@ -196,14 +191,11 @@ describe('Info', () => {
         data: Buffer.from('')
       }]))
 
-      await new Promise((resolve) => {
-        this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
-          assert.equal(e.requestId, 100)
-          assert.equal(e.data.code, 'F01')
-          assert.equal(e.data.name, 'InvalidFieldsError')
-          assert.equal(e.data.data, '{"message":"missing \\"auth_username\\" secondary protocol"}')
-          resolve()
-        })
+      this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
+        assert.equal(e.requestId, 100)
+        assert.equal(e.data.code, 'F01')
+        assert.equal(e.data.name, 'InvalidFieldsError')
+        assert.equal(e.data.data, '{"message":"missing \\"auth_username\\" secondary protocol"}')
       })
     })
 
@@ -222,14 +214,11 @@ describe('Info', () => {
         data: Buffer.from('')
       }]))
 
-      await new Promise((resolve) => {
-        this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
-          assert.equal(e.requestId, 100)
-          assert.equal(e.data.code, 'F00')
-          assert.equal(e.data.name, 'NotAcceptedError')
-          assert.equal(e.data.data, '{"message":"invalid auth token and/or username"}')
-          resolve()
-        })
+      this.newSocket.reply(btpPacket.TYPE_ERROR, e => {
+        assert.equal(e.requestId, 100)
+        assert.equal(e.data.code, 'F00')
+        assert.equal(e.data.name, 'NotAcceptedError')
+        assert.equal(e.data.data, '{"message":"invalid auth token and/or username"}')
       })
     })
 
@@ -248,11 +237,8 @@ describe('Info', () => {
         data: Buffer.from('')
       }]))
 
-      await new Promise((resolve) => {
-        this.newSocket.reply(btpPacket.TYPE_RESPONSE, r => {
-          assert.equal(r.requestId, 100)
-          resolve()
-        })
+      this.newSocket.reply(btpPacket.TYPE_RESPONSE, r => {
+        assert.equal(r.requestId, 100)
       })
     })
   })
