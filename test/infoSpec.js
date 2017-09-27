@@ -133,7 +133,7 @@ describe('Info', () => {
   describe('authentication', () => {
     beforeEach(async function () {
       this.newSocket = new MockSocket()
-      await this.plugin.addSocket(this.newSocket)
+      this.plugin.addSocket(this.newSocket)
     })
 
     afterEach(async function () {
