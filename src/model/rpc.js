@@ -103,15 +103,22 @@ module.exports = class BtpRpc extends EventEmitter {
         this.once('_' + requestId, handleAuthResponse)
       })
     // if the socket isn't a client, we have to start a timeout
-    // after which it must send authentication.
+    // before which it must receive authentication.
     } else {
-      setTimeout(() => {
-        const socketData = this._sockets[newSocketIndex]
-        if (socketData && !socketData.authenticated) {
-          this.debug('timing out socket #' + newSocketIndex)
-          this._deleteSocket(newSocketIndex)
-        }
-      }, DEFAULT_AUTH_TIMEOUT)
+      return new Promise((resolve, reject) => {
+        let timer = setTimeout(() => {
+          const socketData = this._sockets[newSocketIndex]
+          if (socketData && !socketData.authenticated) { 
+            this.debug('timing out socket #' + newSocketIndex)
+            this._deleteSocket(newSocketIndex)
+            reject()
+          }
+        }, DEFAULT_AUTH_TIMEOUT)
+        this.on('authenticated', () => {
+          clearTimeout(timer)
+          resolve()
+        })
+      })
     }
   }
 
@@ -249,6 +256,7 @@ module.exports = class BtpRpc extends EventEmitter {
 
     await _send(socketData.socket, btpPacket.serializeResponse(requestId, []))
     socketData.authenticated = true
+    this.emit('authenticated')
     this.debug('authenticated socket #' + socketIndex)
   }
 
