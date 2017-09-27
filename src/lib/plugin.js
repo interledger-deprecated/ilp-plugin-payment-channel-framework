@@ -115,9 +115,12 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
         [Btp.TYPE_MESSAGE]: this._handleRequest.bind(this)
       },
-      // the token with which incoming sockets are authenticated. If there
-      // is no listener, then this argument is unnecessary.
-      incomingAuthToken: opts.incomingSecret
+      // checks the token with which incoming sockets are authenticated. If there
+      // is no listener, and addSocket will not be called for incoming
+      // BTP connections, then this argument is unnecessary.
+      authCheck: (opts.authCheck || function (username, token) {
+        return (username === '' && token === opts.incomingSecret)
+      })
     })
 
     if (!opts.server && !(opts.prefix && opts.info)) {
