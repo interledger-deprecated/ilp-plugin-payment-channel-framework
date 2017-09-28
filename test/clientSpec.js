@@ -11,7 +11,7 @@ const assert = chai.assert
 const getObjBackend = require('../src/util/backend')
 const MockSocket = require('./helpers/mockSocket')
 const PluginPaymentChannel = require('..')
-const { ilpAndCustomToProtocolData } =
+const { protocolMapToProtocolData } =
   require('../src/util/protocolDataConverter')
 
 const conditionPair = () => {
@@ -43,7 +43,7 @@ describe('Asymmetric plugin virtual', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, [{
-        protocolName: 'get_info',
+        protocolName: 'info',
         contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(info))
       }]))
@@ -73,7 +73,7 @@ describe('Asymmetric plugin virtual', () => {
     it('should get balance from peer', async function () {
       this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId}) => {
         return btpPacket.serializeResponse(requestId, [{
-          protocolName: 'get_balance',
+          protocolName: 'balance',
           contentType: btpPacket.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify('-5'))
         }])
@@ -89,7 +89,7 @@ describe('Asymmetric plugin virtual', () => {
 
       this.condition = condition
       this.fulfillment = fulfillment
-      this.transferJson = {
+      this.transferObj = {
         id: '5709e97e-ffb5-5454-5c53-cfaa5a0cd4c1',
         to: peerAddress,
         amount: '10',
@@ -100,13 +100,13 @@ describe('Asymmetric plugin virtual', () => {
 
       this.transfer = btpPacket.serializePrepare(
         Object.assign({},
-          this.transferJson,
-          {transferId: this.transferJson.id}),
+          this.transferObj,
+          {transferId: this.transferObj.id}),
         requestId,
-        ilpAndCustomToProtocolData(this.transferJson)
+        protocolMapToProtocolData({})
       )
       this.btpFulfillment = btpPacket.serializeFulfill({
-        transferId: this.transferJson.id,
+        transferId: this.transferObj.id,
         fulfillment: this.fulfillment
       }, requestId + 1, [])
     })
@@ -121,7 +121,7 @@ describe('Asymmetric plugin virtual', () => {
 
       this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId}) => {
         return btpPacket.serializeResponse(requestId,
-          ilpAndCustomToProtocolData(response))
+          protocolMapToProtocolData({ ilp: response.ilp }))
       })
 
       const result = await this.plugin.sendRequest({
@@ -142,7 +142,7 @@ describe('Asymmetric plugin virtual', () => {
       const prepared = new Promise((resolve) =>
         this.plugin.once('outgoing_prepare', () => resolve()))
 
-      await this.plugin.sendTransfer(this.transferJson)
+      await this.plugin.sendTransfer(this.transferObj)
       await prepared
 
       const fulfilled = new Promise((resolve) =>
@@ -153,14 +153,14 @@ describe('Asymmetric plugin virtual', () => {
     })
 
     it('should receive and fulfill a transfer', async function () {
-      this.transferJson.to = this.plugin.getAccount()
+      this.transferObj.to = this.plugin.getAccount()
 
       this.mockSocket
         .reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
           return btpPacket.serializeResponse(requestId, [])
         })
         .reply(btpPacket.TYPE_FULFILL, ({requestId, data}) => {
-          assert.equal(data.transferId, this.transferJson.id)
+          assert.equal(data.transferId, this.transferObj.id)
           assert.equal(data.fulfillment, this.fulfillment)
           return btpPacket.serializeResponse(requestId, [])
         })
@@ -174,7 +174,7 @@ describe('Asymmetric plugin virtual', () => {
       const fulfilled = new Promise((resolve) =>
         this.plugin.once('incoming_fulfill', () => resolve()))
 
-      await this.plugin.fulfillCondition(this.transferJson.id, this.fulfillment)
+      await this.plugin.fulfillCondition(this.transferObj.id, this.fulfillment)
       await fulfilled
     })
 
@@ -201,7 +201,7 @@ describe('Asymmetric plugin virtual', () => {
         setTimeout(resolve, 10)
       })
 
-      await assert.isRejected(this.plugin.sendTransfer(this.transferJson))
+      await assert.isRejected(this.plugin.sendTransfer(this.transferObj))
       await prepared
     })
   })

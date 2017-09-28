@@ -6,7 +6,7 @@ const assert = require('chai').assert
 const ObjStore = require('./helpers/objStore')
 const PluginPaymentChannel = require('..')
 const MockSocket = require('./helpers/mockSocket')
-const { protocolDataToIlpAndCustom } =
+const { protocolDataToProtocolMap } =
   require('../src/util/protocolDataConverter')
 
 const info = {
@@ -54,7 +54,7 @@ describe('Info', () => {
       this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
         const expectedGetLimitRequest = {
           protocolData: [{
-            protocolName: 'get_limit',
+            protocolName: 'limit',
             contentType: btpPacket.MIME_APPLICATION_JSON,
             data: Buffer.from('[]')
           }]
@@ -62,7 +62,7 @@ describe('Info', () => {
         assert.deepEqual(data, expectedGetLimitRequest)
 
         return btpPacket.serializeResponse(requestId, [{
-          protocolName: 'get_limit',
+          protocolName: 'limit',
           contentType: btpPacket.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify('5'))
         }])
@@ -74,13 +74,13 @@ describe('Info', () => {
 
     it('handles getLimit requests', function * () {
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
-        const {protocolMap} = protocolDataToIlpAndCustom(data)
-        assert(protocolMap.get_limit)
-        assert(protocolMap.get_limit, options.maxBalance)
+        const {protocolMap} = protocolDataToProtocolMap(data)
+        assert(protocolMap.limit)
+        assert(protocolMap.limit, options.maxBalance)
       })
 
       const getLimitReq = btpPacket.serializeMessage(12345, [{
-        protocolName: 'get_limit',
+        protocolName: 'limit',
         contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }])
@@ -93,7 +93,7 @@ describe('Info', () => {
       this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
         const expectedGetBalanceRequest = {
           protocolData: [{
-            protocolName: 'get_balance',
+            protocolName: 'balance',
             contentType: btpPacket.MIME_APPLICATION_JSON,
             data: Buffer.from('[]')
           }]
@@ -101,7 +101,7 @@ describe('Info', () => {
         assert.deepEqual(data, expectedGetBalanceRequest)
 
         return btpPacket.serializeResponse(requestId, [{
-          protocolName: 'get_balance',
+          protocolName: 'balance',
           contentType: btpPacket.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify('5'))
         }])

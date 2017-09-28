@@ -15,7 +15,7 @@ const expect = chai.expect
 const ObjStore = require('./helpers/objStore')
 const PluginPaymentChannel = require('..')
 const MockSocket = require('./helpers/mockSocket')
-const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+const { protocolDataToProtocolMap, protocolMapToProtocolData } =
   require('../src/util/protocolDataConverter')
 
 const info = {
@@ -114,17 +114,17 @@ describe('Send', () => {
 
     it('should send a request', function * () {
       this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
-        const {ilp, custom} = protocolDataToIlpAndCustom(data)
-        assert.equal(ilp, this.message.ilp)
-        assert.deepEqual(custom, this.message.custom)
-
-        return btpPacket.serializeResponse(requestId,
-          ilpAndCustomToProtocolData(this.response))
+        const protocolMap = protocolDataToProtocolMap(data.protocolData)
+        assert.equal(protocolMap.ilp, this.message.ilp)
+        delete protocolMap.ilp
+        assert.deepEqual(protocolMap, this.message.custom)
+        const response = btpPacket.serializeResponse(requestId,
+          protocolMapToProtocolData(Object.assign({}, this.response.custom, { ilp: this.response.ilp })))
+        return response
       })
 
       const outgoing = new Promise((resolve) => this.plugin.on('outgoing_request', resolve))
       const incoming = new Promise((resolve) => this.plugin.on('incoming_response', resolve))
-
       const response = yield this.plugin.sendRequest(this.message)
       yield outgoing
       yield incoming
@@ -144,16 +144,17 @@ describe('Send', () => {
       })
 
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
-        const {ilp, custom} = protocolDataToIlpAndCustom(data)
-        assert.equal(ilp, this.response.ilp)
-        assert.deepEqual(custom, this.response.custom)
+        const protocolData = protocolDataToProtocolMap(data.protocolData)
+        assert.equal(protocolData.ilp, this.response.ilp)
+        delete protocolData.ilp
+        assert.deepEqual(protocolData, this.response.custom)
       })
 
       const incoming = new Promise((resolve) => this.plugin.on('incoming_request', resolve))
       const outgoing = new Promise((resolve) => this.plugin.on('outgoing_response', resolve))
 
       const btpMessage = btpPacket.serializeMessage(1111,
-        ilpAndCustomToProtocolData(this.message))
+        protocolMapToProtocolData(Object.assign({}, this.message.custom, { ilp: this.message.ilp })))
       yield this.plugin._rpc.handleMessage(this.mockSocketIndex, btpMessage)
 
       yield incoming
@@ -169,8 +170,8 @@ describe('Send', () => {
       })
 
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({data}) => {
-        const {ilp} = protocolDataToIlpAndCustom(data)
-        const error = ilpPacket.deserializeIlpError(Buffer.from(ilp, 'base64'))
+        const protocolData = protocolDataToProtocolMap(data.protocolData)
+        const error = ilpPacket.deserializeIlpError(Buffer.from(protocolData.ilp, 'base64'))
         assert.equal(error.code, 'F00')
         assert.equal(error.name, 'Bad Request')
         assert.equal(error.triggeredBy, this.plugin.getAccount())
@@ -179,7 +180,7 @@ describe('Send', () => {
       })
 
       const btpMessage = btpPacket.serializeMessage(1111,
-        ilpAndCustomToProtocolData(this.message))
+        protocolMapToProtocolData(Object.assign({}, this.message.custom, { ilp: this.message.ilp })))
       yield this.plugin._rpc.handleMessage(this.mockSocketIndex, btpMessage)
     })
 
@@ -203,7 +204,7 @@ describe('Send', () => {
       this.plugin.deregisterRequestHandler()
 
       const btpMessage = btpPacket.serializeMessage(1111,
-        ilpAndCustomToProtocolData(this.message))
+        protocolMapToProtocolData(this.message))
       yield expect(this.plugin._rpc.handleMessage(this.mockSocketIndex, btpMessage))
         .to.be.rejectedWith(/no request handler registered/)
     })
@@ -257,7 +258,7 @@ describe('Send', () => {
       this.btpTransfer = btpPacket.serializePrepare(
         Object.assign({}, this.transfer, {transferId: this.transfer.id}),
         12345, // requestId
-        ilpAndCustomToProtocolData(this.transfer)
+        protocolMapToProtocolData(this.transfer.custom)
       )
       this.btpFulfillment = btpPacket.serializeFulfill({
         transferId: this.transfer.id,
@@ -272,8 +273,8 @@ describe('Send', () => {
         assert.equal(data.executionCondition, this.transfer.executionCondition)
         assert.equal(data.expiresAt.getTime(),
           new Date(this.transfer.expiresAt).getTime())
-        const {custom} = protocolDataToIlpAndCustom(data)
-        assert.deepEqual(custom, this.transfer.custom)
+        const protocolData = protocolDataToProtocolMap(data.protocolData)
+        assert.deepEqual(protocolData, this.transfer.custom)
 
         return btpPacket.serializeResponse(requestId, [])
       })
