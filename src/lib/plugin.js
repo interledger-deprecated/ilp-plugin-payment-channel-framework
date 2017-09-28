@@ -5,6 +5,7 @@ const crypto = require('crypto')
 const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
+const int64 = require('../util/int64')
 
 const Btp = require('btp-packet')
 const BtpRpc = require('../model/rpc')
@@ -13,7 +14,7 @@ const BtpListener = require('./listener')
 const CustomRpc = require('../model/custom-rpc')
 const Validator = require('../util/validator')
 const getBackend = require('../util/backend')
-const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+const { protocolDataToProtocolMap, protocolMapToProtocolData } =
   require('../util/protocolDataConverter')
 
 const errors = require('../util/errors')
@@ -213,13 +214,13 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this.debug('info not available locally, loading remotely')
       const btpResponse = await this._rpc.message(
         [{
-          protocolName: 'get_info',
-          contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from('[]')
+          protocolName: 'info',
+          contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+          data: Buffer.from([3])
         }]
       )
-      const resp = protocolDataToIlpAndCustom(btpResponse)
-      this._info = (resp.protocolMap && resp.protocolMap.get_info) || {}
+      const resp = protocolDataToProtocolMap(btpResponse.protocolData)
+      this._info = (resp && resp.info) || {}
       this._prefix = this.getInfo().prefix
     }
 
@@ -248,62 +249,80 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('outgoing_request', message)
 
     this.debug('requesting with plugin', message)
-    const btpResponse = await this._rpc.message(ilpAndCustomToProtocolData(message))
-
-    const { ilp, custom } = protocolDataToIlpAndCustom(btpResponse)
+    let protocolMapOut = Object.assign({}, message.custom, { ilp: message.ilp })
+    const btpResponse = await this._rpc.message(protocolMapToProtocolData(protocolMapOut))
+    let protocolMapIn = protocolDataToProtocolMap(btpResponse.protocolData)
     const parsed = {
       to: this.getAccount(),
       from: this.getPeerAccount(),
       ledger: this._prefix
     }
+    if (protocolMapIn.ilp) {
+      parsed.ilp = protocolMapIn.ilp
+      delete protocolMapIn.ilp
+    }
 
-    if (ilp) parsed.ilp = ilp
-    if (custom) parsed.custom = custom
+    if (Object.keys(protocolMapIn).length) {
+      parsed.custom = protocolMapIn
+    }
 
     this._validator.validateIncomingMessage(parsed)
     this._safeEmit('incoming_response', parsed)
-
     return parsed
   }
 
   async _handleRequest ({requestId, data}) {
-    const { ilp, custom, protocolMap } = protocolDataToIlpAndCustom(data)
+    let protocolMapIn = protocolDataToProtocolMap(data.protocolData)
     const message = {
       id: requestId,
       to: this.getAccount(),
       from: this.getPeerAccount()
     }
-
-    if (ilp) message.ilp = ilp
-    if (custom) message.custom = custom
-
-    // if there are side protocols only
-    if (!ilp) {
-      if (protocolMap.get_info) {
+    if (protocolMapIn.ilp) {
+      message.ilp = protocolMapIn.ilp
+      delete protocolMapIn.ilp
+    }
+    message.custom = protocolMapIn
+    // special requests that do not trigger the registered request handler
+    switch (protocolMapIn.primary) {
+      case 'info':
+        if (typeof protocolMapIn.info.data !== 'string') {
+          throw new Error('info requests should come as base64url-encoded octet stream data')
+        }
+        const requestBuffer = Buffer.from(protocolMapIn.info.data, 'base64')
+        if (requestBuffer[0] === 1) {
+          // See https://github.com/interledger/interledger/wiki/Interledger-over-BTP/ \
+          // _compare/58b4197521b39aa69cc922000ad4daca823fcc48...d24f4c1d0a80bd101f660636f078b7085f48ab57
+          return [{
+            protocolName: 'info',
+            contentType: Btp.MIME_TEXT_PLAIN_UTF8,
+            data: Buffer.from(this.getAccount(), 'utf8')
+          }]
+        } else {
+          return [{
+            protocolName: 'info',
+            contentType: Btp.MIME_APPLICATION_JSON,
+            data: Buffer.from(JSON.stringify(this.getInfo()), 'utf8')
+          }]
+        }
+      case 'balance':
         return [{
-          protocolName: 'get_info',
-          contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(this.getInfo()))
+          protocolName: 'balance',
+          contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+          data: int64.toBuffer(await this._handleGetBalance())
         }]
-      } else if (protocolMap.get_balance) {
+      case 'limit':
         return [{
-          protocolName: 'get_balance',
-          contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(await this._handleGetBalance()))
-        }]
-      } else if (protocolMap.get_limit) {
-        return [{
-          protocolName: 'get_limit',
+          protocolName: 'limit',
           contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
         }]
-      } else {
-        if (this._paychanContext.rpc.handleProtocols) {
-          return this._paychanContext.rpc.handleProtocols(protocolMap)
+      default:
+        if (this._paychanContext.rpc && this._paychanContext.rpc.handleProtocols) {
+          return this._paychanContext.rpc.handleProtocols(protocolMapIn)
         } else {
-          throw new Error('Unsupported side protocol.')
+          // pass custom message on to registered request handler
         }
-      }
     }
 
     this._validator.validateIncomingMessage(message)
@@ -331,7 +350,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validator.validateOutgoingMessage(response)
     this._safeEmit('outgoing_response', response)
 
-    return ilpAndCustomToProtocolData({ ilp: response.ilp, custom: response.custom })
+    const protocolMapOut = Object.assign({}, response.custom, { ilp: response.ilp })
+    return protocolMapToProtocolData(protocolMapOut)
   }
 
   async sendTransfer (preTransfer) {
@@ -343,8 +363,12 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     // emit any events about it. isIncoming = false.
     await this._transfers.prepare(transfer, false)
 
+    const protocolMapOut = Object.assign({}, transfer.custom)
+    if (transfer.ilp) {
+      protocolMapOut.ilp = transfer.ilp
+    }
     try {
-      await this._rpc.prepare(transfer, ilpAndCustomToProtocolData(transfer))
+      await this._rpc.prepare(transfer, protocolMapToProtocolData(protocolMapOut))
       this.debug('transfer acknowledged ' + transfer.id)
     } catch (e) {
       this.debug(e.name + ' during transfer ' + transfer.id)
@@ -358,7 +382,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async _handleTransfer ({data}) {
-    const { ilp, custom } = protocolDataToIlpAndCustom(data)
+    const protocolMapIn = protocolDataToProtocolMap(data.protocolData)
     const transfer = {
       id: data.id,
       amount: data.amount,
@@ -369,8 +393,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       ledger: this._prefix
     }
 
-    if (ilp) transfer.ilp = ilp
-    if (custom) transfer.custom = custom
+    if (protocolMapIn.ilp) {
+      transfer.ilp = protocolMapIn.ilp
+      delete protocolMapIn.ilp
+    }
+    transfer.custom = protocolMapIn
 
     this._validator.validateIncomingTransfer(transfer)
     await this._transfers.prepare(transfer, true)
@@ -417,7 +444,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const protocolData = []
     const result = await this._rpc.fulfill(transferId, fulfillment, protocolData)
 
-    const { protocolMap } = protocolDataToIlpAndCustom(result)
+    const protocolMap = protocolDataToProtocolMap(result.protocolData)
     const { claim } = protocolMap || {}
 
     try {
@@ -460,10 +487,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this.debug('error creating outgoing claim:', e)
     }
 
-    return result === undefined ? [] : ilpAndCustomToProtocolData({
-      protocolMap: {
-        claim: result
-      }
+    return result === undefined ? [] : protocolMapToProtocolData({
+      claim: result
     })
   }
 
@@ -507,7 +532,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async _handleRejectIncomingTransfer ({data}) {
     const transferId = data.id
-    const { ilp } = protocolDataToIlpAndCustom(data)
+    const { ilp } = protocolDataToProtocolMap(data.protocolData)
 
     this.debug('handling rejection of ' + transferId)
     const transferInfo = await this._transfers.get(transferId)
@@ -633,14 +658,15 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.assertConnectionBeforeCalling('getLimit')
     const peerMaxBalance = await this._rpc.message(
       [{
-        protocolName: 'get_limit',
+        protocolName: 'limit',
         contentType: Btp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
     )
-    const { protocolMap } = (protocolDataToIlpAndCustom(peerMaxBalance))
-    if (protocolMap.get_limit) {
-      return this._stringNegate(protocolMap.get_limit)
+
+    const protocolMap = protocolDataToProtocolMap(peerMaxBalance.protocolData)
+    if (protocolMap.limit) {
+      return this._stringNegate(protocolMap.limit)
     } else {
       throw new Error('Failed to get limit of peer.')
     }
@@ -650,14 +676,14 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.assertConnectionBeforeCalling('getPeerBalance')
     const btpResponse = await this._rpc.message(
       [{
-        protocolName: 'get_balance',
+        protocolName: 'balance',
         contentType: Btp.MIME_APPLICATION_JSON,
         data: Buffer.from('[]')
       }]
     )
 
-    const { protocolMap } = protocolDataToIlpAndCustom(btpResponse)
-    const balance = protocolMap.get_balance
+    const protocolMap = protocolDataToProtocolMap(btpResponse.protocolData)
+    const balance = int64.toString(protocolMap.balance)
     if (!balance) {
       throw new Error('Could not get peer balance.')
     }

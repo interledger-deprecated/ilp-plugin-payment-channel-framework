@@ -12,7 +12,7 @@ const assert = chai.assert
 const ObjStore = require('./helpers/objStore')
 const MockSocket = require('./helpers/mockSocket')
 const makePaymentChannelPlugin = require('..').makePaymentChannelPlugin
-const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
+const { protocolDataToProtocolMap, protocolMapToProtocolData } =
   require('../src/util/protocolDataConverter')
 
 describe('makePaymentChannelPlugin', function () {
@@ -59,7 +59,7 @@ describe('makePaymentChannelPlugin', function () {
 
     this.fulfillment = crypto.randomBytes(32)
 
-    this.transferJson = {
+    this.transferObj = {
       id: uuid(),
       ledger: this.plugin.getInfo().prefix,
       from: this.plugin.getAccount(),
@@ -77,11 +77,11 @@ describe('makePaymentChannelPlugin', function () {
     const requestId = 12345
 
     this.transfer = btpPacket.serializePrepare(
-      Object.assign({}, this.transferJson, {transferId: this.transferJson.id}),
+      Object.assign({}, this.transferObj, {transferId: this.transferObj.id}),
       requestId,
-      ilpAndCustomToProtocolData(this.transferJson))
+      protocolMapToProtocolData(this.transferObj.custom))
     this.btpFulfillment = btpPacket.serializeFulfill({
-      transferId: this.transferJson.id,
+      transferId: this.transferObj.id,
       fulfillment: base64url(this.fulfillment)
     }, requestId + 1, [])
 
@@ -90,7 +90,7 @@ describe('makePaymentChannelPlugin', function () {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, [{
-        protocolName: 'get_info',
+        protocolName: 'info',
         contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(this.info))
       }]))
@@ -168,11 +168,11 @@ describe('makePaymentChannelPlugin', function () {
         called = true
         assert.deepEqual(ctx.state, {})
         assert.equal(ctx.plugin, this.plugin)
-        assert.deepEqual(transfer, this.transferJson)
+        assert.deepEqual(transfer, this.transferObj)
       }
 
-      this.transferJson.from = this.transferJson.to
-      this.transferJson.to = this.plugin.getAccount()
+      this.transferObj.from = this.transferObj.to
+      this.transferObj.to = this.plugin.getAccount()
       const emitted = new Promise((resolve) => this.plugin.on('incoming_prepare', resolve))
 
       this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer)
@@ -233,7 +233,7 @@ describe('makePaymentChannelPlugin', function () {
         return btpPacket.serializeResponse(requestId, [])
       }).reply(btpPacket.TYPE_RESPONSE)
 
-      await this.plugin.sendTransfer(this.transferJson)
+      await this.plugin.sendTransfer(this.transferObj)
 
       await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
 
@@ -253,7 +253,7 @@ describe('makePaymentChannelPlugin', function () {
         return btpPacket.serializeResponse(requestId, [])
       }).reply(btpPacket.TYPE_RESPONSE)
 
-      await this.plugin.sendTransfer(this.transferJson)
+      await this.plugin.sendTransfer(this.transferObj)
       await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.btpFulfillment)
 
       assert.equal(await this.plugin._transfers.getOutgoingFulfilled(), '5')
@@ -289,7 +289,7 @@ describe('makePaymentChannelPlugin', function () {
       this.transfer.to = this.plugin.getAccount()
 
       await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer)
-      await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
+      await this.plugin.fulfillCondition(this.transferObj.id, base64url(this.fulfillment))
 
       await called
     })
@@ -302,7 +302,7 @@ describe('makePaymentChannelPlugin', function () {
       this.mockSocket
         .reply(btpPacket.TYPE_RESPONSE)
         .reply(btpPacket.TYPE_FULFILL, ({requestId, data}) => {
-          assert.equal(data.transferId, this.transferJson.id)
+          assert.equal(data.transferId, this.transferObj.id)
           assert.equal(data.fulfillment, base64url(this.fulfillment))
           return btpPacket.serializeResponse(requestId, [{
             protocolName: 'claim',
@@ -315,14 +315,14 @@ describe('makePaymentChannelPlugin', function () {
       this.transfer.to = this.plugin.getAccount()
 
       await this.plugin._rpc.handleMessage(this.mockSocketIndex, this.transfer)
-      await this.plugin.fulfillCondition(this.transferJson.id, base64url(this.fulfillment))
+      await this.plugin.fulfillCondition(this.transferObj.id, base64url(this.fulfillment))
     })
   })
 
   describe('side-protocols', function () {
     it('should handle custom side-protocols in a BTP message', function * () {
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({data}) => {
-        const { protocolMap } = protocolDataToIlpAndCustom(data)
+        const protocolMap = protocolDataToProtocolMap(data.protocolData)
         assert(protocolMap)
         assert.equal(protocolMap['echo-protocol'], 'hello there back')
       })
