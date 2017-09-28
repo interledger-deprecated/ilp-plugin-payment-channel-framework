@@ -20,6 +20,11 @@ module.exports = class BtpClient {
     this._authToken = parsedBtpUri.password
     parsedBtpUri.username = ''
     parsedBtpUri.password = ''
+
+    if (parsedBtpUri.protocol !== 'btp+wss:' && parsedBtpUri.protocol !== 'btp+ws:') {
+      throw new Error('server protocol must be "btp+wss:" or "btp+ws:"')
+    }
+
     // Note that setting the parsedBtpUri.protocol does not work as expected,
     // so removing the 'btp+' prefix from the full URL here:
     assert(parsedBtpUri.toString().startsWith('btp+'), 'server uri must start with "btp+"')

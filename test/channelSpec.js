@@ -57,7 +57,7 @@ describe('makePaymentChannelPlugin', function () {
     this.PluginClass = makePaymentChannelPlugin(this.channel)
     this.plugin = new (this.PluginClass)(this.opts)
 
-    this.fulfillment = crypto.randomBytes(32)
+    this.fulfillment = Buffer.from('zKTdOSh9Fco8r0UcRyFtGsxk8edf2ZpERJPRFb8cCVo', 'base64')
 
     this.transferJson = {
       id: uuid(),
