@@ -40,10 +40,8 @@ module.exports = class BtpClient {
       const ws = new WebSocket(this._wsUri, {
         perMessageDeflate: false
       })
-      console.log('try to open', this._wsUri)
       let hasBeenOpen = false
       ws.on('open', () => {
-        console.log('open!')
         hasBeenOpen = true
         resolve(ws)
       })
@@ -55,7 +53,6 @@ module.exports = class BtpClient {
         }
       })
       ws.on('close', () => {
-        console.log('close!')
         // automatically reconnect if server reboots
         if (hasBeenOpen && !ws.shouldClose) {
           this.ensureUpstream()
@@ -67,21 +64,22 @@ module.exports = class BtpClient {
   getOpenWebSocketClient () {
     return new Promise((resolve) => {
       let done = false
-      const tryOnce = () => {
-        this.tryToOpenWebSocketClient().then(ws => {
-          if (done) { // this can happen if opening the WebSocket works, but just takes long
-            console.log('got it! but was already done')
-            ws.shouldClose = true
-            ws.close()
-          } else {
-            console.log('got it! setting done')
-            done = true
-            clearInterval(timer)
-            resolve(ws)
-          }
-        }).catch((err) => {
+      const tryOnce = async () => {
+        let ws
+        try {
+          ws = await this.tryToOpenWebSocketClient()
+        } catch (err) {
           console.error('error caught while trying to open WebSocket client', err)
-        })
+          return
+        }
+        if (done) { // this can happen if opening the WebSocket works, but just takes long
+          ws.shouldClose = true
+          ws.close()
+        } else {
+          done = true
+          clearInterval(timer)
+          resolve(ws)
+        }
       }
       let timer = setInterval(tryOnce, CONNECT_RETRY_INTERVAL)
       tryOnce()
@@ -90,7 +88,6 @@ module.exports = class BtpClient {
 
   ensureUpstream () {
     return this.getOpenWebSocketClient().then(ws => {
-      console.log('got the client!')
       this.ws = ws
       ws.on('message', (msg) => {
         this.msgHandler(msg)
