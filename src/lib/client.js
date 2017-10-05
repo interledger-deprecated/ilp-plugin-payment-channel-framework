@@ -33,6 +33,9 @@ module.exports = class BtpClient {
     // so removing the 'btp+' prefix from the full URL here:
     assert(parsedBtpUri.toString().startsWith('btp+'), 'server uri must start with "btp+"')
     this._wsUri = parsedBtpUri.toString().substring('btp+'.length)
+    this.msgHandler = (msg) => {
+      debug('Message dropped because socket was not yet added into plugin!', msg)
+    }
   }
 
   tryToOpenWebSocketClient () {
@@ -89,6 +92,9 @@ module.exports = class BtpClient {
   ensureUpstream () {
     return this.getOpenWebSocketClient().then(ws => {
       this.ws = ws
+      // Note that each new incarnation of the WebSocket gets its
+      // message handler set to the this.msgHandler proxy function,
+      // which itself is set only once by plugin.addSocket:
       ws.on('message', (msg) => {
         this.msgHandler(msg)
       })
@@ -98,12 +104,15 @@ module.exports = class BtpClient {
 
   async connect () {
     debug('connecting to', this._wsUri)
-    await this.getOpenWebSocketClient()
+    await this.ensureUpstream()
     await this._plugin.addSocket({
       send: this.send.bind(this),
       on (eventName, handler) {
+        // Note that each new incarnation of the WebSocket gets its
+        // message handler set to the this.msgHandler proxy function,
+        // which itself is set only once by plugin.addSocket:
         if (eventName === 'message') {
-          this.msgHandler[eventName] = handler
+          this.msgHandler = handler
         }
       }
     }, this._authUsername, this._authToken)
