@@ -75,7 +75,7 @@ describe('Asymmetric plugin virtual', () => {
         return btpPacket.serializeResponse(requestId, [{
           protocolName: 'balance',
           contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
-          data: Buffer.from([ 255, 255, 255, 255, 255, 255, 255, 250 ])
+          data: Buffer.from([ 255, 255, 255, 255, 255, 255, 255, 251 ])
         }])
       })
 

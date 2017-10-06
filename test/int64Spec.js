@@ -22,11 +22,11 @@ describe('int64', function () {
     ]
 
     this.negativeBuffers = [
-      Buffer.from('ff ff ff ff ff ff ff fa'.replace(/ /g, ''), 'hex'),
-      Buffer.from('ff ff ff ff ff ff fe ff'.replace(/ /g, ''), 'hex'),
-      Buffer.from('ff ff ff ff ff ff fe fb'.replace(/ /g, ''), 'hex'),
-      Buffer.from('ff ff ff ff ff ff fb b3'.replace(/ /g, ''), 'hex'),
-      Buffer.from('ff ff ff ff f2 05 74 c3'.replace(/ /g, ''), 'hex')
+      Buffer.from('ff ff ff ff ff ff ff fb'.replace(/ /g, ''), 'hex'),
+      Buffer.from('ff ff ff ff ff ff ff 00'.replace(/ /g, ''), 'hex'),
+      Buffer.from('ff ff ff ff ff ff fe fc'.replace(/ /g, ''), 'hex'),
+      Buffer.from('ff ff ff ff ff ff fb b4'.replace(/ /g, ''), 'hex'),
+      Buffer.from('ff ff ff ff f2 05 74 c4'.replace(/ /g, ''), 'hex')
     ]
   })
 
