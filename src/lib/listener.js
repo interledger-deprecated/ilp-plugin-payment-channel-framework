@@ -17,10 +17,12 @@ module.exports = class BtpListener {
     this._cert = cert
     this._key = key
     this._ca = ca
+
+    this.server = null
   }
 
   listen () {
-    const server = this._cert
+    this.server = this._cert
       ? https.createServer({
         cert: fs.readFileSync(this._cert),
         key: fs.readFileSync(this._key),
@@ -28,16 +30,20 @@ module.exports = class BtpListener {
       })
       : http.createServer()
 
-    server.listen(this._port)
+    this.server.listen(this._port)
 
     this._socketServer = new WebSocket.Server({
       perMessageDeflate: false,
-      server
+      server: this.server
     })
     debug('listening for websocket connections on port ' + this._port)
 
     this._socketServer.on('connection', async (socket) => {
       await this._plugin.addSocket(socket)
     })
+  }
+
+  close () {
+    this.server.close()
   }
 }

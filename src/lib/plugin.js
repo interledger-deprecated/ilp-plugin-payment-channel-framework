@@ -238,6 +238,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   async disconnect () {
     await this._paychan.disconnect(this._paychanContext)
 
+    if (this._listener) {
+      this._listener.close()
+    }
+
     this._connected = false
     this._safeEmit('disconnect')
   }
@@ -508,6 +512,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   async _handleRejectIncomingTransfer ({data}) {
     const transferId = data.id
     const { ilp } = protocolDataToIlpAndCustom(data)
+    const packet = ilpPacket.deserializeIlpPacket(Buffer.from(ilp, 'base64')).data
 
     this.debug('handling rejection of ' + transferId)
     const transferInfo = await this._transfers.get(transferId)
@@ -522,10 +527,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     // TODO: add rejectionReason to interface
-    await this._transfers.cancel(transferId, ilp.data)
+    await this._transfers.cancel(transferId, packet)
     this.debug('peer rejected ' + transferId)
 
-    this._safeEmit('outgoing_reject', transferInfo.transfer, ilp.data)
+    this._safeEmit('outgoing_reject', transferInfo.transfer, packet)
   }
 
   async getBalance () {
