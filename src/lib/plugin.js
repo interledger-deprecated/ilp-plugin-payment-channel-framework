@@ -238,6 +238,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   async disconnect () {
     await this._paychan.disconnect(this._paychanContext)
 
+    if (this._listener) {
+      this._listener.close()
+    }
+
     this._connected = false
     this._safeEmit('disconnect')
   }
