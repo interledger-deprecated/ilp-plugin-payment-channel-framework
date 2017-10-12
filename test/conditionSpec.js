@@ -391,27 +391,31 @@ describe('Conditional Transfers', () => {
         return btpPacket.serializeResponse(requestId, [])
       })
 
+      const reason = {
+        code: 'F00',
+        name: 'Bad Request',
+        triggeredBy: 'g.your.friendly.peer',
+        forwardedBy: [],
+        triggeredAt: new Date(),
+        data: 'reason'
+      }
+
       const btpRejection = btpPacket.serializeReject({
         transferId: this.transferJson.id
       }, 1111, [{
         protocolName: 'ilp',
         contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
-        data: ilpPacket.serializeIlpError({
-          code: 'F00',
-          name: 'Bad Request',
-          triggeredBy: 'g.your.friendly.peer',
-          forwardedBy: [],
-          triggeredAt: new Date(),
-          data: 'reason'
-        })
+        data: ilpPacket.serializeIlpError(reason)
       }])
 
-      const rejected = new Promise((resolve) => this.plugin.on('outgoing_reject', resolve))
+      const rejected = new Promise((resolve) =>
+        this.plugin.on('outgoing_reject', (transfer, reason) => resolve(reason)))
 
       yield this.plugin.sendTransfer(this.transferJson)
 
       yield this.plugin._rpc.handleMessage(this.mockSocketIndex, btpRejection)
-      yield rejected
+      const gotReason = yield rejected
+      assert.deepEqual(gotReason, reason)
     })
 
     it('should not reject an outgoing transfer', function * () {
