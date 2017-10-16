@@ -301,6 +301,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
           contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
         }]
+      } else if (protocolMap.custom) {
+        // Don't throw -- this message will be emitted.
       } else {
         if (this._paychanContext.rpc.handleProtocols) {
           return this._paychanContext.rpc.handleProtocols(protocolMap)
