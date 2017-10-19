@@ -89,11 +89,6 @@ describe('makePaymentChannelPlugin', function () {
     this.mockSocket = new MockSocket()
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
-      .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, [{
-        protocolName: 'get_info',
-        contentType: btpPacket.MIME_APPLICATION_JSON,
-        data: Buffer.from(JSON.stringify(this.info))
-      }]))
 
     await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'password' })
     await this.plugin.connect()
@@ -168,6 +163,8 @@ describe('makePaymentChannelPlugin', function () {
         called = true
         assert.deepEqual(ctx.state, {})
         assert.equal(ctx.plugin, this.plugin)
+        console.log(transfer)
+        console.log(this.transferJson)
         assert.deepEqual(transfer, this.transferJson)
       }
 
