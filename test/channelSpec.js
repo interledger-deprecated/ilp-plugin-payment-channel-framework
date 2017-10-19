@@ -163,8 +163,6 @@ describe('makePaymentChannelPlugin', function () {
         called = true
         assert.deepEqual(ctx.state, {})
         assert.equal(ctx.plugin, this.plugin)
-        console.log(transfer)
-        console.log(this.transferJson)
         assert.deepEqual(transfer, this.transferJson)
       }
 
