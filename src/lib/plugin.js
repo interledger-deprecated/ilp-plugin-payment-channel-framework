@@ -142,6 +142,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
       this._paychan.constructor(this._paychanContext, opts)
       this.getInfo = () => JSON.parse(JSON.stringify(this._paychan.getInfo(this._paychanContext)))
+      this._info = this.getInfo()
+      this._prefix = this._info.prefix
+
       this.getAccount = () => this._paychan.getAccount(this._paychanContext)
       this.getPeerAccount = () => this._paychan.getPeerAccount(this._paychanContext)
       this._getAuthToken = () => this._paychan.getAuthToken(this._paychanContext)
