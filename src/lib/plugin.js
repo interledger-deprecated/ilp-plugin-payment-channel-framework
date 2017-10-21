@@ -5,6 +5,7 @@ const crypto = require('crypto')
 const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
+const int64 = require('../util/int64')
 
 const Btp = require('btp-packet')
 const BtpRpc = require('../model/rpc')
@@ -25,6 +26,11 @@ const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegiste
 
 // TODO: What should the default port be?
 const DEFAULT_PORT = 4195
+
+const INFO_REQUEST_ACCOUNT = 0 // eslint-disable-line no-unused-vars
+const INFO_REQUEST_FULL = 2
+const BALANCE_REQUEST = 0
+const LIMIT_REQUEST = 0
 
 const assertOptionType = (opts, field, type) => {
   const val = opts[field]
@@ -216,13 +222,13 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this.debug('info not available locally, loading remotely')
       const btpResponse = await this._rpc.message(
         [{
-          protocolName: 'get_info',
-          contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from('[]')
+          protocolName: 'info',
+          contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+          data: Buffer.from([ INFO_REQUEST_FULL ])
         }]
       )
       const resp = protocolDataToIlpAndCustom(btpResponse)
-      this._info = (resp.protocolMap && resp.protocolMap.get_info) || {}
+      this._info = (resp.protocolMap && resp.protocolMap.info) || {}
       this._prefix = this.getInfo().prefix
     }
 
@@ -286,21 +292,31 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
     // if there are side protocols only
     if (!ilp) {
-      if (protocolMap.get_info) {
+      if (protocolMap.info) {
+        if (Buffer.isBuffer(protocolMap.info.data) &&
+            protocolMap.info.data.length &&
+            protocolMap.info.data[0] === INFO_REQUEST_FULL) {
+          return [{
+            protocolName: 'info',
+            contentType: Btp.MIME_APPLICATION_JSON,
+            data: Buffer.from(JSON.stringify(this.getInfo()))
+          }]
+        } else {
+          return [{
+            protocolName: 'info',
+            contentType: Btp.MIME_TEXT_PLAIN_UTF8,
+            data: Buffer.from(this.getAccount())
+          }]
+        }
+      } else if (protocolMap.balance) {
         return [{
-          protocolName: 'get_info',
-          contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(this.getInfo()))
+          protocolName: 'balance',
+          contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+          data: int64.toBuffer(await this._handleGetBalance())
         }]
-      } else if (protocolMap.get_balance) {
+      } else if (protocolMap.limit) {
         return [{
-          protocolName: 'get_balance',
-          contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(await this._handleGetBalance()))
-        }]
-      } else if (protocolMap.get_limit) {
-        return [{
-          protocolName: 'get_limit',
+          protocolName: 'limit',
           contentType: Btp.MIME_APPLICATION_JSON,
           data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
         }]
@@ -643,14 +659,14 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.assertConnectionBeforeCalling('getLimit')
     const peerMaxBalance = await this._rpc.message(
       [{
-        protocolName: 'get_limit',
-        contentType: Btp.MIME_APPLICATION_JSON,
-        data: Buffer.from('[]')
+        protocolName: 'limit',
+        contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+        data: Buffer.from([ LIMIT_REQUEST ])
       }]
     )
     const { protocolMap } = (protocolDataToIlpAndCustom(peerMaxBalance))
-    if (protocolMap.get_limit) {
-      return this._stringNegate(protocolMap.get_limit)
+    if (protocolMap.limit) {
+      return this._stringNegate(protocolMap.limit)
     } else {
       throw new Error('Failed to get limit of peer.')
     }
@@ -660,15 +676,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.assertConnectionBeforeCalling('getPeerBalance')
     const btpResponse = await this._rpc.message(
       [{
-        protocolName: 'get_balance',
-        contentType: Btp.MIME_APPLICATION_JSON,
-        data: Buffer.from('[]')
+        protocolName: 'balance',
+        contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+        data: Buffer.from([ BALANCE_REQUEST ])
       }]
     )
 
     const { protocolMap } = protocolDataToIlpAndCustom(btpResponse)
-    const balance = protocolMap.get_balance
+    const balance = int64.toString(protocolMap.balance)
     if (!balance) {
+      console.log(btpResponse)
       throw new Error('Could not get peer balance.')
     }
 

@@ -43,7 +43,7 @@ describe('Asymmetric plugin virtual', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, [{
-        protocolName: 'get_info',
+        protocolName: 'info',
         contentType: btpPacket.MIME_APPLICATION_JSON,
         data: Buffer.from(JSON.stringify(info))
       }]))
@@ -73,9 +73,9 @@ describe('Asymmetric plugin virtual', () => {
     it('should get balance from peer', async function () {
       this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId}) => {
         return btpPacket.serializeResponse(requestId, [{
-          protocolName: 'get_balance',
-          contentType: btpPacket.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify('-5'))
+          protocolName: 'balance',
+          contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
+          data: Buffer.from([ 255, 255, 255, 255, 255, 255, 255, 251 ])
         }])
       })
 
