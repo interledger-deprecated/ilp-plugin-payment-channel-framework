@@ -5,6 +5,7 @@ const uuid = require('uuid4')
 const base64url = require('base64url')
 const btpPacket = require('btp-packet')
 
+const sinon = require('sinon')
 const chai = require('chai')
 chai.use(require('chai-as-promised'))
 const assert = chai.assert
@@ -56,6 +57,15 @@ describe('makePaymentChannelPlugin', function () {
 
     this.PluginClass = makePaymentChannelPlugin(this.channel)
     this.plugin = new (this.PluginClass)(this.opts)
+
+    this.dumyPaychanContext = {
+      state: {},
+      rpc: {},
+      btpRpc: {},
+      transferLog: {},
+      backend: {},
+      plugin: {}
+    }
 
     this.fulfillment = Buffer.from('zKTdOSh9Fco8r0UcRyFtGsxk8edf2ZpERJPRFb8cCVo', 'base64')
 
@@ -118,14 +128,16 @@ describe('makePaymentChannelPlugin', function () {
   })
 
   describe('connect', function () {
-    it('is called when the plugin connects', async function () {
-      let called = false
-      this.channel.connect = (ctx, opts) => {
-        called = true
-      }
+    it('is called once when the plugin connects', async function () {
+      const connectSpy = sinon.spy(this.channel, 'connect')
 
-      await this.plugin.connect()
-      assert.equal(called, true)
+      const plugin = new (this.PluginClass)(this.opts)
+      await plugin.connect()
+      await plugin.connect()
+
+      assert(connectSpy.calledOnce, 'expected connect() to be called once')
+      assert(connectSpy.calledWithMatch(this.dumyPaychanContext),
+        'expected to be called with paychan context object')
     })
 
     it('causes connect to fail if it throws', async function () {
@@ -135,24 +147,22 @@ describe('makePaymentChannelPlugin', function () {
         throw new Error('no')
       }
 
-      await assert.isRejected(this.plugin.connect(), /^no$/)
+      const plugin = new (this.PluginClass)(this.opts)
+      await assert.isRejected(plugin.connect(), /^no$/)
       assert.equal(called, true)
     })
   })
 
   describe('disconnect', function () {
-    it('is called when the plugin disconnects', async function () {
-      await this.plugin.connect()
-
-      let called = false
-      this.channel.disconnect = (ctx, opts) => {
-        called = true
-        assert.deepEqual(ctx.state, {})
-        assert.equal(ctx.plugin, this.plugin)
-      }
+    it('is called once when the plugin disconnects', async function () {
+      const disconnectSpy = sinon.spy(this.channel, 'disconnect')
 
       await this.plugin.disconnect()
-      assert.equal(called, true)
+      await this.plugin.disconnect()
+
+      assert(disconnectSpy.calledOnce, 'expected disconnect() to be called once')
+      assert(disconnectSpy.calledWithMatch(this.dumyPaychanContext),
+        'expected to be called with paychan context object')
     })
   })
 

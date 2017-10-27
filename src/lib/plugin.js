@@ -82,6 +82,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     this._connected = false
+    this._connecting = false
     this._requestHandler = null
     this._sideProtoHandler = {}
 
@@ -218,22 +219,30 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async connect () {
-    if (!(this._info && this._prefix)) {
-      this.debug('info not available locally, loading remotely')
-      const btpResponse = await this._rpc.message(
-        [{
-          protocolName: 'info',
-          contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-          data: Buffer.from([ INFO_REQUEST_FULL ])
-        }]
-      )
-      const resp = protocolDataToIlpAndCustom(btpResponse)
-      this._info = (resp.protocolMap && resp.protocolMap.info) || {}
-      this._prefix = this.getInfo().prefix
+    if (this._connected || this._connecting) return
+    this._connecting = true
+
+    try {
+      if (!(this._info && this._prefix)) {
+        this.debug('info not available locally, loading remotely')
+        const btpResponse = await this._rpc.message(
+          [{
+            protocolName: 'info',
+            contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+            data: Buffer.from([ INFO_REQUEST_FULL ])
+          }]
+        )
+        const resp = protocolDataToIlpAndCustom(btpResponse)
+        this._info = (resp.protocolMap && resp.protocolMap.info) || {}
+        this._prefix = this.getInfo().prefix
+      }
+
+      await this._paychan.connect(this._paychanContext)
+    } catch (err) {
+      debug('connect failed:', err)
+      this._connected = false
+      throw err
     }
-
-    await this._paychan.connect(this._paychanContext)
-
     this._validator = new Validator({
       account: this.getAccount(),
       peer: this.getPeerAccount(),
@@ -241,17 +250,19 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     })
 
     this._connected = true
+    this._connecting = false
     this._safeEmit('connect')
   }
 
   async disconnect () {
+    if (!this._connected) return
+    this._connected = false
+
     await this._paychan.disconnect(this._paychanContext)
 
     if (this._listener) {
       this._listener.close()
     }
-
-    this._connected = false
     this._safeEmit('disconnect')
   }
 
