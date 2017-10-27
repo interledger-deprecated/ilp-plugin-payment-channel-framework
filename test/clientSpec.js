@@ -33,7 +33,7 @@ const info = {
 
 const peerAddress = 'example.red.server'
 const options = {
-  server: 'btp+wss://user:placeholder@example.com/rpc'
+  server: 'btp+wss://user:shhh secret@example.com/rpc'
 }
 
 describe('Asymmetric plugin virtual', () => {
@@ -51,7 +51,7 @@ describe('Asymmetric plugin virtual', () => {
     this.plugin = new PluginPaymentChannel(Object.assign({},
       options))
 
-    await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'placeholder' })
+    await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'shhh secret' })
     await this.plugin.connect()
   })
 
@@ -63,7 +63,7 @@ describe('Asymmetric plugin virtual', () => {
     it('should parse the BTP URI correctly', function () {
       assert.equal(this.plugin._client._wsUri, 'wss://example.com/rpc')
       assert.equal(this.plugin._client._authUsername, 'user')
-      assert.equal(this.plugin._client._authToken, 'placeholder')
+      assert.equal(this.plugin._client._authToken, 'shhh secret')
     })
 
     it('should get info from rpc endpoint', function () {

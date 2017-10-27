@@ -16,8 +16,8 @@ module.exports = class BtpClient {
     // btp+ws://auth_username:auth_token@host/path
     // See also: https://github.com/interledger/rfcs/pull/300
     const parsedBtpUri = new URL(server)
-    this._authUsername = parsedBtpUri.username
-    this._authToken = parsedBtpUri.password
+    this._authUsername = decodeURIComponent(parsedBtpUri.username)
+    this._authToken = decodeURIComponent(parsedBtpUri.password)
     parsedBtpUri.username = ''
     parsedBtpUri.password = ''
 
