@@ -10,10 +10,8 @@ const { protocolDataToIlpAndCustom } =
   require('../src/util/protocolDataConverter')
 
 const info = {
-  prefix: 'example.red.',
   currencyScale: 2,
   currencyCode: 'USD',
-  maxBalance: '1000000',
   connectors: [ { id: 'other', name: 'other', connector: 'peer.usd.other' } ]
 }
 
@@ -116,7 +114,27 @@ describe('Info', () => {
     it('should use the supplied info', function () {
       assert.deepEqual(
         this.plugin.getInfo(),
-        Object.assign({}, info, {prefix: this.plugin.getInfo().prefix}))
+        Object.assign({}, info, {prefix: this.plugin.getInfo().prefix})
+      )
+    })
+
+    it('should return the full info', function () {
+      const expectedFullInfo = Object.assign({},
+        info,
+        {prefix: this.plugin.getInfo().prefix}
+      )
+      this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({data}) => {
+        const resp = protocolDataToIlpAndCustom(data)
+        assert.property(resp.protocolMap, 'info')
+        assert.deepEqual(resp.protocolMap.info, expectedFullInfo)
+      })
+
+      const fullInfoReq = btpPacket.serializeMessage(12345, [{
+        protocolName: 'info',
+        contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
+        data: Buffer.from([ 2 ]) // 2 == INFO_REQUEST_FULL
+      }])
+      this.mockSocket.emit('message', fullInfoReq)
     })
   })
 

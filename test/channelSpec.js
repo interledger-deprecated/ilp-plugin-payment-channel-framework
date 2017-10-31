@@ -33,6 +33,7 @@ describe('makePaymentChannelPlugin', function () {
       maxBalance: '1000000',
       minBalance: '-40',
       server: 'btp+wss://user:seeecret@example.com/rpc',
+      prefix: 'example.red.',
       info: this.info,
       _store: new ObjStore()
     }
