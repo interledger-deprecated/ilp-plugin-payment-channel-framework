@@ -91,6 +91,11 @@ describe('ObjStore and ObjBackend', function () {
       const tracker = await this.backend.getMaxValueTracker('foo')
       assert.deepEqual(tracker, this.tracker)
     })
+
+    it('throws if the key is undefined', async function () {
+      this.opts.key = undefined
+      assert.throws(() => this.backend.getMaxValueTracker(this.opts.key))
+    })
   })
 
   describe('transferLog', function () {

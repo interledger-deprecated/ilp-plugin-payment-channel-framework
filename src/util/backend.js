@@ -259,7 +259,7 @@ class MaxValueTracker {
     } else if (typeof opts === 'object') {
       this.key = opts.key
     } else {
-      this.key = ''
+      throw new Error('key must be defined')
     }
 
     if (!this.key.match(KEY_REGEX)) {
