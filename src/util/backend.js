@@ -253,7 +253,15 @@ class MaxValueTracker {
     this.writeQueue = Promise.resolve()
 
     this.store = store
-    this.key = opts.key || ''
+
+    if (typeof opts === 'string') {
+      this.key = opts
+    } else if (typeof opts === 'object') {
+      this.key = opts.key
+    } else {
+      this.key = ''
+    }
+
     if (!this.key.match(KEY_REGEX)) {
       throw new Error('invalid key: ' + this.key)
     }

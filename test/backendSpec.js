@@ -86,6 +86,11 @@ describe('ObjStore and ObjBackend', function () {
       await assert.isRejected(this.tracker.setIfMax({ foo: 'bar' }),
         /entry .* must have a value/)
     })
+
+    it('accepts the key to be passed as string', async function () {
+      const tracker = await this.backend.getMaxValueTracker('foo')
+      assert.deepEqual(tracker, this.tracker)
+    })
   })
 
   describe('transferLog', function () {
