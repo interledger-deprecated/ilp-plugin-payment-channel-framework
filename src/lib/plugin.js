@@ -20,7 +20,7 @@ const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
 const errors = require('../util/errors')
 const NotAcceptedError = errors.NotAcceptedError
 const InvalidFieldsError = errors.InvalidFieldsError
-const AlreadyRejectedError = errors.AlreadyRejectedError
+const AlreadyRolledBackError = errors.AlreadyRolledBackError
 const AlreadyFulfilledError = errors.AlreadyFulfilledError
 const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegisteredError
 
@@ -437,7 +437,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const transferInfo = await this._transfers.get(transferId)
 
     if (transferInfo.state === 'cancelled') {
-      throw new AlreadyRejectedError(transferId + ' has already been cancelled: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already been cancelled: ' +
         JSON.stringify(transferInfo))
     }
 
@@ -446,7 +446,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     if (new Date(transferInfo.transfer.expiresAt).getTime() < Date.now()) {
-      throw new AlreadyRejectedError(transferId + ' has already expired: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already expired: ' +
         JSON.stringify(transferInfo))
     }
 
@@ -473,7 +473,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const transferInfo = await this._transfers.get(transferId)
 
     if (transferInfo.state === 'cancelled') {
-      throw new AlreadyRejectedError(transferId + ' has already been cancelled: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already been cancelled: ' +
         JSON.stringify(transferInfo))
     }
 
@@ -482,7 +482,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     if (new Date(transferInfo.transfer.expiresAt).getTime() < Date.now()) {
-      throw new AlreadyRejectedError(transferId + ' has already expired: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already expired: ' +
         JSON.stringify(transferInfo))
     }
 
