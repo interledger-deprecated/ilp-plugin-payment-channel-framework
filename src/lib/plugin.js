@@ -20,7 +20,7 @@ const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
 const errors = require('../util/errors')
 const NotAcceptedError = errors.NotAcceptedError
 const InvalidFieldsError = errors.InvalidFieldsError
-const AlreadyRejectedError = errors.AlreadyRejectedError
+const AlreadyRolledBackError = errors.AlreadyRolledBackError
 const AlreadyFulfilledError = errors.AlreadyFulfilledError
 const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegisteredError
 
@@ -149,8 +149,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
       this._paychan.constructor(this._paychanContext, opts)
       this.getInfo = () => JSON.parse(JSON.stringify(this._paychan.getInfo(this._paychanContext)))
+      this._prefix = opts.prefix
       this._info = this.getInfo()
-      this._prefix = this._info.prefix
 
       this.getAccount = () => this._paychan.getAccount(this._paychanContext)
       this.getPeerAccount = () => this._paychan.getPeerAccount(this._paychanContext)
@@ -234,7 +234,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         )
         const resp = protocolDataToIlpAndCustom(btpResponse)
         this._info = (resp.protocolMap && resp.protocolMap.info) || {}
-        this._prefix = this.getInfo().prefix
+        if (this._prefix && this._prefix !== this._info.prefix) {
+          throw new Error('Remote prefix does not match configured prefix')
+        } else {
+          this._prefix = this._info.prefix
+        }
       }
 
       await this._paychan.connect(this._paychanContext)
@@ -304,9 +308,8 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     // if there are side protocols only
     if (!ilp) {
       if (protocolMap.info) {
-        if (Buffer.isBuffer(protocolMap.info.data) &&
-            protocolMap.info.data.length &&
-            protocolMap.info.data[0] === INFO_REQUEST_FULL) {
+        if (Buffer.isBuffer(protocolMap.info) &&
+            protocolMap.info.readInt8() === INFO_REQUEST_FULL) {
           return [{
             protocolName: 'info',
             contentType: Btp.MIME_APPLICATION_JSON,
@@ -434,7 +437,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const transferInfo = await this._transfers.get(transferId)
 
     if (transferInfo.state === 'cancelled') {
-      throw new AlreadyRejectedError(transferId + ' has already been cancelled: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already been cancelled: ' +
         JSON.stringify(transferInfo))
     }
 
@@ -443,7 +446,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     if (new Date(transferInfo.transfer.expiresAt).getTime() < Date.now()) {
-      throw new AlreadyRejectedError(transferId + ' has already expired: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already expired: ' +
         JSON.stringify(transferInfo))
     }
 
@@ -470,7 +473,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const transferInfo = await this._transfers.get(transferId)
 
     if (transferInfo.state === 'cancelled') {
-      throw new AlreadyRejectedError(transferId + ' has already been cancelled: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already been cancelled: ' +
         JSON.stringify(transferInfo))
     }
 
@@ -479,7 +482,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     if (new Date(transferInfo.transfer.expiresAt).getTime() < Date.now()) {
-      throw new AlreadyRejectedError(transferId + ' has already expired: ' +
+      throw new AlreadyRolledBackError(transferId + ' has already expired: ' +
         JSON.stringify(transferInfo))
     }
 
@@ -696,7 +699,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const { protocolMap } = protocolDataToIlpAndCustom(btpResponse)
     const balance = int64.toString(protocolMap.balance)
     if (!balance) {
-      console.log(btpResponse)
       throw new Error('Could not get peer balance.')
     }
 
