@@ -1,3 +1,6 @@
+'use strict'
+
+const InMemoryStore = require('../model/in-memory-store')
 const deepEqual = require('deep-equal')
 const BigNumber = require('bignumber.js')
 const KEY_REGEX = /^[A-Za-z0-9\-_]*$/
@@ -247,12 +250,10 @@ class ObjTransferLog {
   }
 }
 
+let writeQueue = Promise.resolve()
 class MaxValueTracker {
   constructor (store, opts) {
-    this.highest = { value: '0', data: null }
-    this.writeQueue = Promise.resolve()
-
-    this.store = store
+    this.store = store || new InMemoryStore()
 
     if (typeof opts === 'string') {
       this.key = opts
@@ -268,50 +269,47 @@ class MaxValueTracker {
   }
 
   async connect () {
-    if (this.connected) return
-    if (this.store) {
-      const storedHighest = await this.store.get(this.key + ':mvt:maximum')
-      if (storedHighest) this.highest = JSON.parse(storedHighest)
-    }
-
-    this.connected = true
+    // NOP
   }
 
   async setIfMax (entry) {
-    await this.connect()
-
     if (!entry.value) {
       throw new Error('entry "' + JSON.stringify(entry) + '" must have a value')
     }
 
-    const last = this.highest
-    const lastValue = new BigNumber(last.value)
+    // By wrapping .getMax() and .put() in a Promise and queue it
+    // into writeQueue we ensure that consecutive calls to setIfMax do not
+    // interrupt a previous call
+    let readWritePromise
+    writeQueue = writeQueue.then(() => {
+      readWritePromise = new Promise(async (resolve, reject) => {
+        try {
+          const last = await this.getMax()
+          const lastValue = new BigNumber(last.value)
 
-    if (lastValue.lt(entry.value)) {
-      this.highest = entry
-
-      if (this.store) {
-        this.writeQueue = this.writeQueue
-          .then(() => {
-            return this.store.put(this.key + ':mvt:maximum', JSON.stringify({
+          if (lastValue.lt(entry.value)) {
+            await this.store.put(this.key + ':mvt:maximum', JSON.stringify({
               value: entry.value,
               data: entry.data
             }))
-          })
+            resolve(last)
+          } else {
+            resolve(entry)
+          }
+        } catch (err) {
+          reject(err)
+        }
+      })
+      return readWritePromise
+    })
 
-        await this.writeQueue
-      }
-
-      return last
-    }
-
-    return entry
+    await writeQueue
+    return readWritePromise
   }
 
   async getMax () {
-    await this.connect()
-
-    return this.highest
+    const highest = await this.store.get(this.key + ':mvt:maximum')
+    return highest ? JSON.parse(highest) : { value: '0', data: null }
   }
 }
 
