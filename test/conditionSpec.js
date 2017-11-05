@@ -356,7 +356,7 @@ describe('Conditional Transfers', () => {
 
   describe('rejectIncomingTransfer', () => {
     it('rejects an incoming transfer', function * () {
-      const expectedRejectionReason = {
+      const expectedIlpError = {
         code: 'F00',
         name: 'Bad Request',
         triggeredBy: 'example.red.server',
@@ -365,13 +365,22 @@ describe('Conditional Transfers', () => {
         data: 'reason'
       }
 
+      const expectedRejectionReason = {
+        code: 'F00',
+        name: 'Bad Request',
+        triggered_by: 'example.red.server',
+        forwarded_by: [],
+        triggered_at: new Date(),
+        additional_info: 'reason'
+      }
+
       this.mockSocket
         .reply(btpPacket.TYPE_RESPONSE)
         .reply(btpPacket.TYPE_REJECT, ({requestId, data}) => {
           const [ ilp ] = data.protocolData.filter(p => p.protocolName === 'ilp')
-          const ilpError = ilpPacket.deserializeIlpPacket(ilp.data)
+          const ilpError = ilpPacket.deserializeIlpError(ilp.data)
           assert.equal(data.transferId, this.transferJson.id)
-          assert.deepEqual(ilpError.data, expectedRejectionReason)
+          assert.deepEqual(ilpError, expectedIlpError)
           return btpPacket.serializeResponse(requestId, [])
         })
 
@@ -391,7 +400,7 @@ describe('Conditional Transfers', () => {
         return btpPacket.serializeResponse(requestId, [])
       })
 
-      const reason = {
+      const ilpError = {
         code: 'F00',
         name: 'Bad Request',
         triggeredBy: 'g.your.friendly.peer',
@@ -399,13 +408,21 @@ describe('Conditional Transfers', () => {
         triggeredAt: new Date(),
         data: 'reason'
       }
+      const reason = {
+        code: 'F00',
+        name: 'Bad Request',
+        triggered_by: 'g.your.friendly.peer',
+        forwarded_by: [],
+        triggered_at: new Date(),
+        additional_info: 'reason'
+      }
 
       const btpRejection = btpPacket.serializeReject({
         transferId: this.transferJson.id
       }, 1111, [{
         protocolName: 'ilp',
         contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
-        data: ilpPacket.serializeIlpError(reason)
+        data: ilpPacket.serializeIlpError(ilpError)
       }])
 
       const rejected = new Promise((resolve) =>
