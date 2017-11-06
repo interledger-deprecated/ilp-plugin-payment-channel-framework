@@ -362,7 +362,7 @@ describe('Conditional Transfers', () => {
         triggeredBy: 'example.red.server',
         forwardedBy: [],
         triggeredAt: new Date(),
-        data: 'reason'
+        data: JSON.stringify({ extra: 'data' })
       }
 
       const expectedRejectionReason = {
@@ -371,7 +371,7 @@ describe('Conditional Transfers', () => {
         triggered_by: 'example.red.server',
         forwarded_by: [],
         triggered_at: new Date(),
-        additional_info: 'reason'
+        additional_info: { extra: 'data' }
       }
 
       this.mockSocket
@@ -406,7 +406,7 @@ describe('Conditional Transfers', () => {
         triggeredBy: 'g.your.friendly.peer',
         forwardedBy: [],
         triggeredAt: new Date(),
-        data: 'reason'
+        data: JSON.stringify({ extra: 'data' })
       }
       const reason = {
         code: 'F00',
@@ -414,7 +414,7 @@ describe('Conditional Transfers', () => {
         triggered_by: 'g.your.friendly.peer',
         forwarded_by: [],
         triggered_at: new Date(),
-        additional_info: 'reason'
+        additional_info: { extra: 'data' }
       }
 
       const btpRejection = btpPacket.serializeReject({

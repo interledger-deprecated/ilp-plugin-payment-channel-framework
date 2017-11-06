@@ -531,7 +531,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       triggeredBy: reason.triggered_by,
       forwardedBy: reason.forwarded_by,
       triggeredAt: reason.triggered_at,
-      data: reason.additional_info
+      data: JSON.stringify(reason.additional_info)
     })
 
     this._safeEmit('incoming_reject', transferInfo.transfer, reason)
@@ -551,8 +551,12 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       name: packet.name,
       triggered_by: packet.triggeredBy,
       forwarded_by: packet.forwardedBy,
-      triggered_at: packet.triggeredAt,
-      additional_info: packet.data
+      triggered_at: packet.triggeredAt
+    }
+    try {
+      rejectionReason.additional_info = JSON.parse(packet.data)
+    } catch (e) {
+      rejectionReason.additional_info = 'not JSON'
     }
 
     this.debug('handling rejection of ' + transferId)
