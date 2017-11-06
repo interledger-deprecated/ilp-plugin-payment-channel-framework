@@ -525,16 +525,14 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.cancel(transferId, reason)
     this.debug('rejected ' + transferId)
 
-    // const rejectionReason = ilpPacket.serializeIlpError({
-    //   code: 'F00', // TODO: what should be the code? (cc: sharafian)
-    //   name: 'Bad Request', // TODO: what should be the name?   (cc: sharafian)
-    //   triggeredBy: this.getAccount(),
-    //   forwardedBy: [],
-    //   triggeredAt: new Date(),
-    //   data: reason
-    // })
-
-    const rejectionReason = ilpPacket.serializeIlpError(reason)
+    const rejectionReason = ilpPacket.serializeIlpError({
+      code: reason.code,
+      name: reason.name,
+      triggeredBy: reason.triggered_by,
+      forwardedBy: reason.forwarded_by,
+      triggeredAt: reason.triggered_at,
+      data: JSON.stringify(reason.additional_info)
+    })
 
     this._safeEmit('incoming_reject', transferInfo.transfer, reason)
     await this._rpc.reject(transferId, [{
@@ -548,6 +546,18 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const transferId = data.id
     const { ilp } = protocolDataToIlpAndCustom(data)
     const packet = ilpPacket.deserializeIlpPacket(Buffer.from(ilp, 'base64')).data
+    const rejectionReason = {
+      code: packet.code,
+      name: packet.name,
+      triggered_by: packet.triggeredBy,
+      forwarded_by: packet.forwardedBy,
+      triggered_at: packet.triggeredAt
+    }
+    try {
+      rejectionReason.additional_info = JSON.parse(packet.data)
+    } catch (e) {
+      rejectionReason.additional_info = 'not JSON'
+    }
 
     this.debug('handling rejection of ' + transferId)
     const transferInfo = await this._transfers.get(transferId)
@@ -562,10 +572,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
 
     // TODO: add rejectionReason to interface
-    await this._transfers.cancel(transferId, packet)
+    await this._transfers.cancel(transferId, rejectionReason)
     this.debug('peer rejected ' + transferId)
 
-    this._safeEmit('outgoing_reject', transferInfo.transfer, packet)
+    this._safeEmit('outgoing_reject', transferInfo.transfer, rejectionReason)
   }
 
   async getBalance () {
