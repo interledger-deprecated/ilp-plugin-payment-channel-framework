@@ -219,8 +219,14 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
   }
 
   async connect () {
-    if (this._connected || this._connecting) return
+    if (this._connected) return
+    if (this._connecting) return this._connectPromise
     this._connecting = true
+
+    let finishConnectPromise
+    this._connectPromise = new Promise((resolve) => {
+      finishConnectPromise = resolve
+    })
 
     try {
       if (!(this._info && this._prefix)) {
@@ -256,6 +262,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._connected = true
     this._connecting = false
     this._safeEmit('connect')
+    finishConnectPromise()
   }
 
   async disconnect () {
