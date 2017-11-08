@@ -3,6 +3,7 @@
 const chai = require('chai')
 chai.use(require('chai-as-promised'))
 const assert = chai.assert
+const sinon = require('sinon')
 
 const getObjBackend = require('../src/util/backend')
 const ObjStore = require('./helpers/objStore')
@@ -95,6 +96,50 @@ describe('ObjStore and ObjBackend', function () {
     it('throws if the key is undefined', async function () {
       this.opts.key = undefined
       assert.throws(() => this.backend.getMaxValueTracker(this.opts.key))
+    })
+
+    describe('multiple tracker for same key', function () {
+      beforeEach(async function () {
+        this.anotherTracker = this.backend.getMaxValueTracker('foo')
+        await this.anotherTracker.connect()
+      })
+
+      it('should not return stale cache entries', async function () {
+        const newHighest = {value: '1', data: 'bar'}
+        await this.tracker.setIfMax(newHighest)
+        assert.deepEqual(await this.anotherTracker.getMax(), newHighest)
+      })
+
+      it('should not overwrite another tracker\'s highest', async function () {
+        const newHighest = {value: '2', data: 'bar'}
+        const notHighest = {value: '1', data: 'not_bar'}
+        await this.tracker.setIfMax(newHighest)
+        const last = await this.anotherTracker.setIfMax(notHighest)
+        assert.deepEqual(last, notHighest)
+        assert.deepEqual(await this.tracker.getMax(), newHighest)
+        assert.deepEqual(await this.anotherTracker.getMax(), newHighest)
+      })
+
+      it('setIfMax should not race', async function () {
+        const stub = sinon.stub(this.store, 'put')
+        stub.callThrough()
+        stub.onFirstCall().callsFake((key, value) => {
+          return new Promise((resolve, reject) => {
+            setTimeout(() => { // simulates delay when writing to the store
+              resolve(this.store.put(key, value))
+            }, 50)
+          })
+        }).onSecondCall().callsFake((key, value) => this.store.put(key, value))
+
+        const firstCall = this.anotherTracker.setIfMax({value: '1', data: 'not_bar'})
+        const secondCall = this.tracker.setIfMax({value: '2', data: 'bar'})
+
+        await Promise.all([firstCall, secondCall])
+
+        assert.deepEqual(await firstCall, {value: '0', data: null})
+        assert.deepEqual(await secondCall, {value: '1', data: 'not_bar'})
+        assert.deepEqual(await this.anotherTracker.getMax(), {value: '2', data: 'bar'})
+      })
     })
   })
 
