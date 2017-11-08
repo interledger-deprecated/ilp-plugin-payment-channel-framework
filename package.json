@@ -71,8 +71,8 @@
       "path": "./node_modules/cz-conventional-changelog"
     },
     "five-bells-integration-test-loader": {
-      "module": "five-bells-integration-test",
-      "repo": "interledgerjs/five-bells-integration-test"
+      "module": "ilp-plugin-integration-test",
+      "repo": "dappelt/ilp-plugin-integration-test"
     }
   }
 }
