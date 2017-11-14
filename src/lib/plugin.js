@@ -357,6 +357,7 @@ class PluginPaymentChannel extends EventEmitter2 {
 
   async _handleFulfillCondition ({data}) {
     const transferId = data.id // TODO: useless rewrite
+    const { ilp, custom } = protocolDataToIlpAndCustom(data)
 
     this._validator.validateFulfillment(data.fulfillment)
     const transferInfo = await this._transfers.get(transferId)
@@ -377,7 +378,7 @@ class PluginPaymentChannel extends EventEmitter2 {
 
     this._validateFulfillment(data.fulfillment, transferInfo.transfer.executionCondition)
     await this._transfers.fulfill(transferId, data.fulfillment)
-    this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment)
+    this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment, ilp)
 
     let result
     try {

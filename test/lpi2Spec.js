@@ -86,7 +86,9 @@ describe.only('LPI2', () => {
       })
       this.mockSocket.reply(btpPacket.TYPE_RESPONSE)
 
-      await this.plugin.sendTransfer(this.transfer)
+      const { fulfillment, data } = await this.plugin.sendTransfer(this.transfer)
+      assert.deepEqual(fulfillment, this.fulfillment)
+      assert.deepEqual(data, base64url(Buffer.from('09050365965900', 'hex')))
     })
 
     it('should perform a transfer that rejects', async function () {
