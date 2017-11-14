@@ -7,10 +7,7 @@ const _assert = require('assert')
 const REGEX_32_BYTES_AS_BASE64URL = /^[A-Za-z0-9_-]{43}$/
 
 module.exports = class Validator {
-  constructor (opts) {
-    this._account = opts.account
-    this._peer = opts.peer
-    this._prefix = opts.prefix
+  constructor () {
   }
 
   static validatePaymentChannelBackend (paymentChannelBackend) {
@@ -19,8 +16,6 @@ module.exports = class Validator {
 
     const message = (name) => `paymentChannelBackend.${name} must be a function`
     _assert.strictEqual(typeof paymentChannelBackend.constructor, 'function', message('constructor'))
-    _assert.strictEqual(typeof paymentChannelBackend.getAccount, 'function', message('getAccount'))
-    _assert.strictEqual(typeof paymentChannelBackend.getPeerAccount, 'function', message('getPeerAccount'))
     _assert.strictEqual(typeof paymentChannelBackend.getInfo, 'function', message('getInfo'))
     _assert.strictEqual(typeof paymentChannelBackend.connect, 'function', message('connect'))
     _assert.strictEqual(typeof paymentChannelBackend.disconnect, 'function', message('disconnect'))
@@ -34,14 +29,10 @@ module.exports = class Validator {
 
   validateIncomingTransfer (t) {
     this.validateTransfer(t)
-    if (t.account) return
-    this.assertIncoming(t)
   }
 
   validateOutgoingTransfer (t) {
     this.validateTransfer(t)
-    if (t.account) return
-    this.assertOutgoing(t)
   }
 
   validateTransfer (t) {
@@ -57,43 +48,11 @@ module.exports = class Validator {
     assertObject(t.custom, 'custom')
     assertConditionOrPreimage(t.executionCondition, 'executionCondition')
     assertString(t.expiresAt, 'expiresAt')
-
-    assert(t.to, 'must have a destination (.to)')
-    assertPrefix(t.ledger, this._prefix, 'ledger')
-  }
-
-  validateIncomingMessage (m) {
-    this.validateMessage(m)
-    this.assertIncoming(m)
-  }
-
-  validateOutgoingMessage (m) {
-    this.validateMessage(m)
-    this.assertOutgoing(m)
-  }
-
-  validateMessage (m) {
-    if (m.ilp) {
-      assertString(m.ilp, 'message ilp must be a string')
-    }
-
-    assert(m.to, 'must have a destination (.to)')
-    assertPrefix(m.ledger, this._prefix, 'ledger')
   }
 
   validateFulfillment (f) {
     assert(f, 'fulfillment must not be "' + f + '"')
     assertConditionOrPreimage(f, 'fulfillment')
-  }
-
-  assertIncoming (o) {
-    assertAccount(o.from, this._peer, 'from')
-    assertAccount(o.to, this._account, 'to')
-  }
-
-  assertOutgoing (o) {
-    assertAccount(o.from, this._account, 'from')
-    assertAccount(o.to, this._peer, 'to')
   }
 }
 
