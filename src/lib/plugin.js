@@ -47,8 +47,6 @@ class PluginPaymentChannel extends EventEmitter2 {
     super()
     const Backend = getBackend(opts._store)
 
-    this._transferHandler = opts.transferHandler
-
     this._opts = opts
     this._stateful = !!(opts._backend || opts._store)
     this.debug = paymentChannelBackend
@@ -172,6 +170,10 @@ class PluginPaymentChannel extends EventEmitter2 {
     this.isConnected = () => this._connected
     this.isAuthorized = (authToken) => (authToken === this._getAuthToken())
     this._rpc.setAuthToken(this._getAuthToken())
+  }
+
+  registerTransferHandler (transferHandler) {
+    this._transferHandler = transferHandler
   }
 
   // don't throw errors even if the event handler throws
