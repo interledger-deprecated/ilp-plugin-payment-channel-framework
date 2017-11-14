@@ -491,5 +491,5 @@ class PluginPaymentChannel extends EventEmitter2 {
   }
 }
 
-PluginPaymentChannelFramework.lpiVersion = 2
-module.exports = PluginPaymentChannelFramework
+PluginPaymentChannel.lpiVersion = 2
+module.exports = PluginPaymentChannel

@@ -5,7 +5,7 @@ const assert = chai.assert
 
 const Validator = require('../src/util/validator')
 
-describe('validator', function () {
+describe.skip('validator', function () {
   beforeEach(() => {
     this.account = 'test.ledger.account'
     this.peer = 'test.ledger.peer'

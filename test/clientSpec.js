@@ -36,7 +36,7 @@ const options = {
   server: 'btp+wss://user:shhh secret@example.com/rpc'
 }
 
-describe('Asymmetric plugin virtual', () => {
+describe.skip('Asymmetric plugin virtual', () => {
   beforeEach(async function () {
     this.mockSocketIndex = 0
     this.mockSocket = new MockSocket()

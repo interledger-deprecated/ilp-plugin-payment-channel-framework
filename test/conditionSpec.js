@@ -32,7 +32,7 @@ const options = {
   info: info
 }
 
-describe('Conditional Transfers', () => {
+describe.skip('Conditional Transfers', () => {
   beforeEach(function * () {
     options._store = new ObjStore()
     this.plugin = new PluginPaymentChannel(options)
