@@ -47,6 +47,8 @@ class PluginPaymentChannel extends EventEmitter2 {
     super()
     const Backend = getBackend(opts._store)
 
+    this._transferHandler = opts.transferHandler
+
     this._opts = opts
     this._stateful = !!(opts._backend || opts._store)
     this.debug = paymentChannelBackend
