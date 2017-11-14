@@ -7,9 +7,6 @@ const _assert = require('assert')
 const REGEX_32_BYTES_AS_BASE64URL = /^[A-Za-z0-9_-]{43}$/
 
 module.exports = class Validator {
-  constructor () {
-  }
-
   static validatePaymentChannelBackend (paymentChannelBackend) {
     _assert.strictEqual(typeof paymentChannelBackend.pluginName, 'string',
       'paymentChannelBackend.pluginName must be a string')
@@ -72,20 +69,6 @@ function assertString (value, name) {
 
 function assertObject (value, name) {
   assertType(value, name, 'object')
-}
-
-function assertPrefix (value, prefix, name) {
-  if (!value) return
-  assertString(value, name)
-  assert(value === prefix,
-    name + ' (' + value + ') must match ILP prefix: ' + prefix)
-}
-
-function assertAccount (value, account, name) {
-  if (!value) return
-  assertString(value, name)
-  assert(value.startsWith(account),
-    name + ' (' + value + ') must start with account: ' + account)
 }
 
 function assertConditionOrPreimage (value, name) {

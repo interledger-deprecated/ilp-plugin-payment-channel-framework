@@ -35,7 +35,6 @@ module.exports = class BtpRpc extends EventEmitter {
     assert(typeof handlers[btpPacket.TYPE_PREPARE] === 'function', 'Prepare handler missing')
     assert(typeof handlers[btpPacket.TYPE_FULFILL] === 'function', 'Fulfill handler missing')
     assert(typeof handlers[btpPacket.TYPE_REJECT] === 'function', 'Reject handler missing')
-    assert(typeof handlers[btpPacket.TYPE_MESSAGE] === 'function', 'Message handler missing')
     assert(!client || typeof client === 'object', 'client must be an object')
     assert(typeof plugin === 'object', 'plugin must be provided')
 

@@ -5,7 +5,6 @@ const crypto = require('crypto')
 const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
-const int64 = require('../util/int64')
 
 const Btp = require('btp-packet')
 const BtpRpc = require('../model/rpc')
@@ -18,19 +17,17 @@ const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
   require('../util/protocolDataConverter')
 
 const errors = require('../util/errors')
+const InterledgerError = errors.InterledgerError
 const NotAcceptedError = errors.NotAcceptedError
 const InvalidFieldsError = errors.InvalidFieldsError
 const AlreadyRolledBackError = errors.AlreadyRolledBackError
 const AlreadyFulfilledError = errors.AlreadyFulfilledError
-const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegisteredError
 
 // TODO: What should the default port be?
 const DEFAULT_PORT = 4195
 
 const INFO_REQUEST_ACCOUNT = 0 // eslint-disable-line no-unused-vars
 const INFO_REQUEST_FULL = 2
-const BALANCE_REQUEST = 0
-const LIMIT_REQUEST = 0
 
 const assertOptionType = (opts, field, type) => {
   const val = opts[field]
@@ -46,7 +43,6 @@ const moduleName = (paymentChannelBackend) => {
 }
 
 class PluginPaymentChannel extends EventEmitter2 {
-
   constructor (paymentChannelBackend, opts) {
     super()
     const Backend = getBackend(opts._store)
@@ -120,8 +116,7 @@ class PluginPaymentChannel extends EventEmitter2 {
       handlers: {
         [Btp.TYPE_PREPARE]: this._handleTransfer.bind(this),
         [Btp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
-        [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
-        [Btp.TYPE_MESSAGE]: this._handleRequest.bind(this)
+        [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this)
       },
       // checks the token with which incoming sockets are authenticated. If there
       // is no listener, and addSocket will not be called for incoming
@@ -256,16 +251,13 @@ class PluginPaymentChannel extends EventEmitter2 {
     }
 
     this._safeEmit('outgoing_prepare', transfer)
-    if (this._stateful) {
-      this._setupTransferExpiry(transfer.id, transfer.expiresAt)
-    }
 
     return new Promise((resolve, reject) => {
       const that = this
 
       function cleanUp () {
         setImmediate(() => {
-          that.removeListener('outgoing_reject', onReject)        
+          that.removeListener('outgoing_reject', onReject)
           that.removeListener('outgoing_fulfill', onFulfill)
         })
       }
@@ -276,7 +268,7 @@ class PluginPaymentChannel extends EventEmitter2 {
         reject(new InterledgerError(transfer, reason))
       }
 
-      function onFulfill (transfer, fulfillment, data) {
+      function onFulfill (_transfer, fulfillment, data) {
         if (_transfer.id !== transfer.id) return
         cleanUp()
         resolve({ fulfillment, data })
@@ -475,7 +467,7 @@ class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('outgoing_reject', transferInfo.transfer, rejectionReason)
   }
 
-  validateFulfillment (fulfillment, condition) {
+  _validateFulfillment (fulfillment, condition) {
     this._validator.validateFulfillment(fulfillment)
     const hash = crypto.createHash('sha256')
     hash.update(fulfillment, 'base64')
