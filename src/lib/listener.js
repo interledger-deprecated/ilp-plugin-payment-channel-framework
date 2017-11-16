@@ -21,7 +21,7 @@ module.exports = class BtpListener {
     this.server = null
   }
 
-  listen () {
+  async listen () {
     this.server = this._cert
       ? https.createServer({
         cert: fs.readFileSync(this._cert),
@@ -30,7 +30,9 @@ module.exports = class BtpListener {
       })
       : http.createServer()
 
-    this.server.listen(this._port)
+    await new Promise((resolve) => {
+      this.server.listen(this._port, resolve)
+    })
 
     this._socketServer = new WebSocket.Server({
       perMessageDeflate: false,
@@ -43,7 +45,13 @@ module.exports = class BtpListener {
     })
   }
 
-  close () {
-    this.server.close()
+  async close () {
+    await new Promise((resolve, reject) => {
+      const cb = (err) => {
+        if (err) reject(err)
+        else resolve()
+      }
+      this.server.close(cb)
+    })
   }
 }
