@@ -106,7 +106,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         key: opts.listener.key,
         ca: opts.listener.ca
       })
-      this._listener.listen()
     } else {
       this._listener = null
     }
@@ -228,6 +227,15 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       finishConnectPromise = resolve
     })
 
+    if (this._listener) {
+      try {
+        await this._listener.listen()
+      } catch (err) {
+        debug('Failed starting websocket server', err)
+        throw err
+      }
+    }
+
     try {
       if (!(this._info && this._prefix)) {
         this.debug('info not available locally, loading remotely')
@@ -271,8 +279,16 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
     await this._paychan.disconnect(this._paychanContext)
 
+    // closes all open sockets
+    this._rpc.disconnect()
+
+    // stop web socket server, if any
     if (this._listener) {
-      this._listener.close()
+      try {
+        await this._listener.close()
+      } catch (err) {
+        debug('Failed stopping websocket server', err)
+      }
     }
     this._safeEmit('disconnect')
   }
