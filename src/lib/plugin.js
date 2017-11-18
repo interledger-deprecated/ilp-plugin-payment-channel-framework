@@ -438,7 +438,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.debug('acknowledging transfer id ', transfer.id)
   }
 
-  async fulfillCondition (transferId, fulfillment) {
+  async fulfillCondition (transferId, fulfillment, ilp) {
     this.assertConnectionBeforeCalling('fulfillCondition')
     this._validator.validateFulfillment(fulfillment)
     const transferInfo = await this._transfers.get(transferId)
@@ -460,7 +460,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validateFulfillment(fulfillment, transferInfo.transfer.executionCondition)
     await this._transfers.fulfill(transferId, fulfillment)
     this._safeEmit('incoming_fulfill', transferInfo.transfer, fulfillment)
-    const protocolData = []
+    const protocolData = [{
+      protocolName: 'ilp',
+      contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+      data: ilp || new Buffer([ 0x09, 0x00 ])
+    }]
     const result = await this._rpc.fulfill(transferId, fulfillment, protocolData)
 
     const { protocolMap } = protocolDataToIlpAndCustom(result)
@@ -475,6 +479,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async _handleFulfillCondition ({data}) {
     const transferId = data.id // TODO: useless rewrite
+    const { ilp } = protocolDataToIlpAndCustom(data)
 
     this._validator.validateFulfillment(data.fulfillment)
     const transferInfo = await this._transfers.get(transferId)
@@ -495,7 +500,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
     this._validateFulfillment(data.fulfillment, transferInfo.transfer.executionCondition)
     await this._transfers.fulfill(transferId, data.fulfillment)
-    this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment)
+    this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment, ilp)
 
     let result
     try {
