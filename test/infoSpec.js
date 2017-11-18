@@ -23,7 +23,7 @@ const options = {
   incomingSecret: 'placeholder'
 }
 
-describe('Info', () => {
+describe.skip('Info', () => {
   beforeEach(async function () {
     options._store = new ObjStore()
     this.plugin = new PluginPaymentChannel(options)

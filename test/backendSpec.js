@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const getObjBackend = require('../src/util/backend')
 const ObjStore = require('./helpers/objStore')
 
-describe('ObjStore and ObjBackend', function () {
+describe.skip('ObjStore and ObjBackend', function () {
   beforeEach(function () {
     this.store = new ObjStore()
     this.backend = getObjBackend(this.store)

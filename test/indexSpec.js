@@ -12,7 +12,7 @@ const options = {
   _backend: getObjBackend(null)
 }
 
-describe('constructor', () => {
+describe.skip('constructor', () => {
   it('should be a function', () => {
     assert.isFunction(PluginPaymentChannel)
   })

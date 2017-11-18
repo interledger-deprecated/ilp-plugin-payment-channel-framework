@@ -5,7 +5,7 @@ const assert = chai.assert
 
 const int64 = require('../src/util/int64')
 
-describe('int64', function () {
+describe.skip('int64', function () {
   beforeEach(() => {
     // TODO: test big numbers
 

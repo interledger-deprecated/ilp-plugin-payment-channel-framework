@@ -35,7 +35,6 @@ module.exports = class BtpRpc extends EventEmitter {
     assert(typeof handlers[btpPacket.TYPE_PREPARE] === 'function', 'Prepare handler missing')
     assert(typeof handlers[btpPacket.TYPE_FULFILL] === 'function', 'Fulfill handler missing')
     assert(typeof handlers[btpPacket.TYPE_REJECT] === 'function', 'Reject handler missing')
-    assert(typeof handlers[btpPacket.TYPE_MESSAGE] === 'function', 'Message handler missing')
     assert(!client || typeof client === 'object', 'client must be an object')
     assert(typeof plugin === 'object', 'plugin must be provided')
 
@@ -69,6 +68,11 @@ module.exports = class BtpRpc extends EventEmitter {
       } catch (err) {
         this.debug(`RPC Error: ${err.message}. Message was ${JSON.stringify(message)}`)
       }
+    })
+
+    socket.on('close', (status) => {
+      console.log('SOCKET CLOSE INFO:', Date.now(), status)
+      this._deleteSocket(newSocketIndex)
     })
 
     // if this is a client, then send a special request with which to
@@ -184,6 +188,9 @@ module.exports = class BtpRpc extends EventEmitter {
       triggeredAt: new Date(),
       data: JSON.stringify({ message })
     }, requestId, []))
+      .catch((e) => {
+        this.debug('warning, socket error:', e.message)
+      })
   }
 
   _deleteSocket (socketIndex) {
@@ -269,9 +276,12 @@ module.exports = class BtpRpc extends EventEmitter {
       }
     }
 
-    this.debug('sending ', Buffer.from(data).toString('hex'))
-    await Promise.all(this._sockets.map(async (socketData) =>
-      socketData.authenticated && _send(socketData.socket, data)))
+    console.log('sending ', Buffer.from(data).toString('hex'))
+    console.log('SOCKETS LENGTH:', this._sockets.length)
+    await Promise.all(this._sockets.map(async (socketData) => {
+      console.log('SOCKET:', socketData.socket.readyState)
+      return socketData.authenticated && _send(socketData.socket, data)
+    }))
 
     let callback
     const response = new Promise((resolve, reject) => {
@@ -295,7 +305,7 @@ module.exports = class BtpRpc extends EventEmitter {
     const timeout = new Promise((resolve, reject) =>
       setTimeout(() => {
         this.removeListener('_' + id, callback)
-        reject(new Error(id + ' timed out'))
+        reject(new Error(id + ' timed out: ' + JSON.stringify(data)))
       }, DEFAULT_TIMEOUT))
 
     return Promise.race([
@@ -354,12 +364,16 @@ module.exports = class BtpRpc extends EventEmitter {
 
 function _send (socket, data) {
   return new Promise((resolve, reject) => {
-    socket.send(data, {binary: true}, (err) => {
-      if (err) {
-        reject(err)
-      }
-      resolve()
-    })
+    try {
+      socket.send(data, {binary: true}, (err) => {
+        if (err) {
+          reject(err)
+        }
+        resolve()
+      })
+    } catch (e) {
+      reject(e)
+    }
   })
 }
 

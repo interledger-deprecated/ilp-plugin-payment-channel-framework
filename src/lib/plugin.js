@@ -5,7 +5,6 @@ const crypto = require('crypto')
 const base64url = require('base64url')
 const ilpPacket = require('ilp-packet')
 const debug = require('debug')
-const int64 = require('../util/int64')
 
 const Btp = require('btp-packet')
 const BtpRpc = require('../model/rpc')
@@ -18,19 +17,17 @@ const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
   require('../util/protocolDataConverter')
 
 const errors = require('../util/errors')
+const InterledgerError = errors.InterledgerError
 const NotAcceptedError = errors.NotAcceptedError
 const InvalidFieldsError = errors.InvalidFieldsError
 const AlreadyRolledBackError = errors.AlreadyRolledBackError
 const AlreadyFulfilledError = errors.AlreadyFulfilledError
-const RequestHandlerAlreadyRegisteredError = errors.RequestHandlerAlreadyRegisteredError
 
 // TODO: What should the default port be?
 const DEFAULT_PORT = 4195
 
 const INFO_REQUEST_ACCOUNT = 0 // eslint-disable-line no-unused-vars
 const INFO_REQUEST_FULL = 2
-const BALANCE_REQUEST = 0
-const LIMIT_REQUEST = 0
 
 const assertOptionType = (opts, field, type) => {
   const val = opts[field]
@@ -45,7 +42,7 @@ const moduleName = (paymentChannelBackend) => {
   return 'ilp-plugin-' + pluginName.toLowerCase()
 }
 
-module.exports = class PluginPaymentChannel extends EventEmitter2 {
+class PluginPaymentChannel extends EventEmitter2 {
   constructor (paymentChannelBackend, opts) {
     super()
     const Backend = getBackend(opts._store)
@@ -120,7 +117,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         [Btp.TYPE_PREPARE]: this._handleTransfer.bind(this),
         [Btp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
         [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
-        [Btp.TYPE_MESSAGE]: this._handleRequest.bind(this)
+        [Btp.TYPE_MESSAGE]: this._handleMessage.bind(this)
       },
       // checks the token with which incoming sockets are authenticated. If there
       // is no listener, and addSocket will not be called for incoming
@@ -129,10 +126,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         return (username === '' && token === opts.incomingSecret)
       })
     })
-
-    if (!opts.server && !(opts.prefix && opts.info)) {
-      throw new Error('when running in server mode, the \'prefix\' and \'info\' config parameters are required')
-    }
 
     if (this._stateful && paymentChannelBackend) {
       Validator.validatePaymentChannelBackend(paymentChannelBackend)
@@ -152,19 +145,12 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._prefix = opts.prefix
       this._info = this.getInfo()
 
-      this.getAccount = () => this._paychan.getAccount(this._paychanContext)
-      this.getPeerAccount = () => this._paychan.getPeerAccount(this._paychanContext)
       this._getAuthToken = () => this._paychan.getAuthToken(this._paychanContext)
     } else {
       this._info = opts.info || null
-      if (this._info) {
-        // autofill prefix from opts if info is specified and does not include prefix
-        this._info.prefix = this._info.prefix || opts.prefix
-      }
 
       this._peerAccountName = this._stateful ? 'client' : 'server'
       this._accountName = this._stateful ? 'server' : 'client'
-      this._prefix = opts.prefix
 
       // payment channels aren't used in the asymmetric case so it's stubbed out
       this._paychanContext = {}
@@ -177,8 +163,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       }
 
       this.getInfo = () => this._info && JSON.parse(JSON.stringify(this._info))
-      this.getAccount = () => (this._prefix + this._accountName)
-      this.getPeerAccount = () => (this._prefix + this._peerAccountName)
       this._getAuthToken = () => opts.token
     }
 
@@ -187,6 +171,10 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.isConnected = () => this._connected
     this.isAuthorized = (authToken) => (authToken === this._getAuthToken())
     this._rpc.setAuthToken(this._getAuthToken())
+  }
+
+  registerTransferHandler (transferHandler) {
+    this._transferHandler = transferHandler
   }
 
   // don't throw errors even if the event handler throws
@@ -200,24 +188,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 
-  // TODO: This function should be depcrecated from RFC-0004. Instead we should
-  // use registerSideProtocolHandler. (@sharafian)
-  registerRequestHandler (handler) {
-    if (this._requestHandler) {
-      throw new RequestHandlerAlreadyRegisteredError('requestHandler is already registered')
-    }
-
-    if (typeof handler !== 'function') {
-      throw new InvalidFieldsError('requestHandler must be a function')
-    }
-
-    this._requestHandler = handler
-  }
-
-  deregisterRequestHandler () {
-    this._requestHandler = null
-  }
-
   async connect () {
     if (this._connected) return
     if (this._connecting) return this._connectPromise
@@ -229,7 +199,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     })
 
     try {
-      if (!(this._info && this._prefix)) {
+      if (!this._info) {
         this.debug('info not available locally, loading remotely')
         const btpResponse = await this._rpc.message(
           [{
@@ -240,11 +210,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         )
         const resp = protocolDataToIlpAndCustom(btpResponse)
         this._info = (resp.protocolMap && resp.protocolMap.info) || {}
-        if (this._prefix && this._prefix !== this._info.prefix) {
-          throw new Error('Remote prefix does not match configured prefix')
-        } else {
-          this._prefix = this._info.prefix
-        }
       }
 
       await this._paychan.connect(this._paychanContext)
@@ -253,11 +218,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this._connected = false
       throw err
     }
-    this._validator = new Validator({
-      account: this.getAccount(),
-      peer: this.getPeerAccount(),
-      prefix: this.getInfo().prefix
-    })
+    this._validator = new Validator()
 
     this._connected = true
     this._connecting = false
@@ -277,112 +238,48 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('disconnect')
   }
 
-  async sendRequest (message) {
-    this.assertConnectionBeforeCalling('sendRequest')
-    this._validator.validateOutgoingMessage(message)
-    this._safeEmit('outgoing_request', message)
-
-    this.debug('requesting with plugin', message)
-    const btpResponse = await this._rpc.message(ilpAndCustomToProtocolData(message))
-
-    const { ilp, custom } = protocolDataToIlpAndCustom(btpResponse)
-    const parsed = {
-      to: this.getAccount(),
-      from: this.getPeerAccount(),
-      ledger: this._prefix
-    }
-
-    if (ilp) parsed.ilp = ilp
-    if (custom) parsed.custom = custom
-
-    this._validator.validateIncomingMessage(parsed)
-    this._safeEmit('incoming_response', parsed)
-
-    return parsed
-  }
-
-  async _handleRequest ({requestId, data}) {
+  async _handleMessage ({ requestId, data }) {
     const { ilp, custom, protocolMap } = protocolDataToIlpAndCustom(data)
     const message = {
-      id: requestId,
-      to: this.getAccount(),
-      from: this.getPeerAccount()
+      id: requestId
     }
 
     if (ilp) message.ilp = ilp
     if (custom) message.custom = custom
 
     // if there are side protocols only
-    if (!ilp) {
-      if (protocolMap.info) {
-        if (Buffer.isBuffer(protocolMap.info) &&
-            protocolMap.info.readInt8() === INFO_REQUEST_FULL) {
-          return [{
-            protocolName: 'info',
-            contentType: Btp.MIME_APPLICATION_JSON,
-            data: Buffer.from(JSON.stringify(this.getInfo()))
-          }]
-        } else {
-          return [{
-            protocolName: 'info',
-            contentType: Btp.MIME_TEXT_PLAIN_UTF8,
-            data: Buffer.from(this.getAccount())
-          }]
-        }
-      } else if (protocolMap.balance) {
-        return [{
-          protocolName: 'balance',
-          contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-          data: int64.toBuffer(await this._handleGetBalance())
-        }]
-      } else if (protocolMap.limit) {
-        return [{
-          protocolName: 'limit',
-          contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
-        }]
-      } else if (protocolMap.custom) {
-        // Don't throw -- this message will be emitted.
+    if (protocolMap.info) {
+      return [{
+        protocolName: 'info',
+        contentType: Btp.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify(this.getInfo()))
+      }]
+    } else if (protocolMap.balance) {
+      return [{
+        protocolName: 'balance',
+        contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+        data: int64.toBuffer(await this._handleGetBalance())
+      }]
+    } else if (protocolMap.limit) {
+      return [{
+        protocolName: 'limit',
+        contentType: Btp.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
+      }]
+    } else if (protocolMap.custom) {
+      // Don't throw -- this message will be emitted.
+    } else {
+      if (this._paychanContext.rpc.handleProtocols) {
+        return this._paychanContext.rpc.handleProtocols(protocolMap)
       } else {
-        if (this._paychanContext.rpc.handleProtocols) {
-          return this._paychanContext.rpc.handleProtocols(protocolMap)
-        } else {
-          throw new Error('Unsupported side protocol.')
-        }
+        throw new Error('Unsupported side protocol.')
       }
     }
-
-    this._validator.validateIncomingMessage(message)
-    this._safeEmit('incoming_request', message)
-
-    if (!this._requestHandler) {
-      throw new NotAcceptedError('no request handler registered')
-    }
-
-    const response = await this._requestHandler(message)
-      .catch((e) => ({
-        ledger: message.ledger,
-        to: this.getPeerAccount(),
-        from: this.getAccount(),
-        ilp: base64url(ilpPacket.serializeIlpError({
-          code: 'F00',
-          name: 'Bad Request',
-          triggeredBy: this.getAccount(),
-          forwardedBy: [],
-          triggeredAt: new Date(),
-          data: JSON.stringify({ message: e.message })
-        }))
-      }))
-
-    this._validator.validateOutgoingMessage(response)
-    this._safeEmit('outgoing_response', response)
-
-    return ilpAndCustomToProtocolData({ ilp: response.ilp, custom: response.custom })
   }
 
   async sendTransfer (preTransfer) {
     this.assertConnectionBeforeCalling('sendTransfer')
-    const transfer = Object.assign({}, preTransfer, { ledger: this._prefix })
+    const transfer = Object.assign({}, preTransfer)
     this._validator.validateOutgoingTransfer(transfer)
 
     // apply the transfer before the other plugin can
@@ -393,14 +290,58 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       await this._rpc.prepare(transfer, ilpAndCustomToProtocolData(transfer))
       this.debug('transfer acknowledged ' + transfer.id)
     } catch (e) {
+      console.log('ERROR:', e)
       this.debug(e.name + ' during transfer ' + transfer.id)
       throw e
     }
 
     this._safeEmit('outgoing_prepare', transfer)
-    if (this._stateful) {
-      this._setupTransferExpiry(transfer.id, transfer.expiresAt)
-    }
+
+    return new Promise((resolve, reject) => {
+      console.log('LISTENING FOR EVENTS')
+      const that = this
+
+      function cleanUp () {
+        setImmediate(() => {
+          that.removeListener('outgoing_reject', onReject)
+          that.removeListener('outgoing_fulfill', onFulfill)
+        })
+      }
+
+      function onReject (_transfer, reason) {
+        console.log('EV REJECT')
+        if (_transfer.id !== transfer.id) return
+        cleanUp()
+        reject(new InterledgerError(reason))
+      }
+
+      function onFulfill (_transfer, fulfillment, data) {
+        console.log('EV FULFILL')
+        if (_transfer.id !== transfer.id) return
+        cleanUp()
+        resolve({ fulfillment, data })
+      }
+
+      that.on('outgoing_reject', onReject)
+      that.on('outgoing_fulfill', onFulfill)
+    })
+  }
+
+  _expireTransfer (transfer) {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        reject(new InterledgerError({
+          code: 'R00',
+          name: 'Transfer Timed Out',
+          triggered_by: '',
+          forwarded_by: [],
+          triggered_at: new Date(),
+          additional_info: {
+            message: transfer.id + ' expired'
+          }
+        }))
+      }, Date.parse(transfer.expiresAt) - Date.now())
+    })
   }
 
   async _handleTransfer ({data}) {
@@ -409,10 +350,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       id: data.id,
       amount: data.amount,
       executionCondition: data.executionCondition,
-      expiresAt: data.expiresAt.toISOString(),
-      to: this.getAccount(),
-      from: this.getPeerAccount(),
-      ledger: this._prefix
+      expiresAt: data.expiresAt.toISOString()
     }
 
     if (ilp) transfer.ilp = ilp
@@ -429,16 +367,29 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       throw e
     }
 
-    // set up expiry here too, so both sides can send the expiration message
     this._safeEmit('incoming_prepare', transfer)
-    if (this._stateful) {
-      this._setupTransferExpiry(transfer.id, transfer.expiresAt)
-    }
 
-    this.debug('acknowledging transfer id ', transfer.id)
+    // TODO: better way of finishing RPC request before responding
+    setImmediate(async () => {
+      let response
+      try {
+        response = await Promise.race([
+          this._transferHandler(transfer),
+          this._expireTransfer(transfer)
+        ])
+      } catch (e) {
+        console.log(e)
+        await this.rejectIncomingTransfer(transfer.id, e.reason)
+        return
+      }
+
+      // fulfillmentInfo: { fulfillment (base64url), data (base64url) }
+      console.log('SENDING A RESPONSE:', response)
+      await this.fulfillCondition(transfer.id, response.fulfillment, response.data)
+    })
   }
 
-  async fulfillCondition (transferId, fulfillment) {
+  async fulfillCondition (transferId, fulfillment, ilp) {
     this.assertConnectionBeforeCalling('fulfillCondition')
     this._validator.validateFulfillment(fulfillment)
     const transferInfo = await this._transfers.get(transferId)
@@ -460,7 +411,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validateFulfillment(fulfillment, transferInfo.transfer.executionCondition)
     await this._transfers.fulfill(transferId, fulfillment)
     this._safeEmit('incoming_fulfill', transferInfo.transfer, fulfillment)
-    const protocolData = []
+    const protocolData = [{
+      protocolName: 'ilp',
+      contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+      data: ilp || new Buffer([ 0x09, 0x00 ])
+    }]
     const result = await this._rpc.fulfill(transferId, fulfillment, protocolData)
 
     const { protocolMap } = protocolDataToIlpAndCustom(result)
@@ -475,6 +430,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
   async _handleFulfillCondition ({data}) {
     const transferId = data.id // TODO: useless rewrite
+    const { ilp, custom } = protocolDataToIlpAndCustom(data)
 
     this._validator.validateFulfillment(data.fulfillment)
     const transferInfo = await this._transfers.get(transferId)
@@ -495,7 +451,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
     this._validateFulfillment(data.fulfillment, transferInfo.transfer.executionCondition)
     await this._transfers.fulfill(transferId, data.fulfillment)
-    this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment)
+    this._safeEmit('outgoing_fulfill', transferInfo.transfer, data.fulfillment, ilp)
 
     let result
     try {
@@ -532,6 +488,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.cancel(transferId, reason)
     this.debug('rejected ' + transferId)
 
+    console.log('REASON FOR REJECT IS:', reason)
     const rejectionReason = ilpPacket.serializeIlpError({
       code: reason.code,
       name: reason.name,
@@ -585,143 +542,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('outgoing_reject', transferInfo.transfer, rejectionReason)
   }
 
-  async getBalance () {
-    this.assertConnectionBeforeCalling('getBalance')
-    if (this._stateful) {
-      return this._transfers.getBalance()
-    } else {
-      return this.getPeerBalance()
-    }
-  }
-
-  async _handleGetBalance () {
-    return this._transfers.getBalance()
-  }
-
-  /* TODO: reassess whether this is ever needed
-  async getFulfillment (transferId) {
-    this.assertConnectionBeforeCalling('getFulfillment')
-    if (this._stateful) {
-      return this._transfers.getFulfillment(transferId)
-    } else {
-      return this._rpc.call('get_fulfillment', this._prefix, [ transferId ])
-    }
-  }
-  */
-
-  _setupTransferExpiry (transferId, expiresAt) {
-    const expiry = Date.parse(expiresAt)
-    const now = new Date()
-
-    setTimeout(
-      this._expireTransfer.bind(this, transferId),
-      (expiry - now))
-  }
-
-  async _expireTransfer (transferId) {
-    const transferInfo = await this._transfers.get(transferId)
-    if (!transferInfo || transferInfo.state !== 'prepared') return
-
-    this.debug('timing out ' + transferId)
-    try {
-      await this._transfers.cancel(transferId, 'expired')
-    } catch (e) {
-      this.debug('error expiring ' + transferId + ': ' + e.message)
-      return
-    }
-
-    const rejectionReason = ilpPacket.serializeIlpError({
-      code: 'R00',
-      name: 'Transfer Timed Out',
-      triggeredBy: this.getAccount(),
-      forwardedBy: [],
-      triggeredAt: new Date(),
-      data: 'expired'
-    })
-
-    await this._rpc.reject(transferId, [{
-      protocolName: 'ilp',
-      contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-      data: rejectionReason
-    }]).catch(() => {})
-    this._safeEmit((transferInfo.isIncoming ? 'incoming' : 'outgoing') + '_cancel',
-      transferInfo.transfer)
-  }
-
-  async _handleExpireTransfer (transferId) {
-    const transferInfo = await this._transfers.get(transferId)
-    if (transferInfo.state !== 'prepared') return true
-
-    if (Date.now() < Date.parse(transferInfo.transfer.expiresAt)) {
-      throw new Error(transferId + ' doesn\'t expire until ' +
-        transferInfo.transfer.expiresAt + ' (current time is ' +
-        new Date().toISOString() + ')')
-    }
-
-    this.debug('timing out ' + transferId)
-    try {
-      await this._transfers.cancel(transferId, 'expired')
-    } catch (e) {
-      this.debug('error expiring ' + transferId + ': ' + e.message)
-      return true
-    }
-
-    this._safeEmit((transferInfo.isIncoming ? 'incoming' : 'outgoing') + '_cancel',
-      transferInfo.transfer)
-    return true
-  }
-
-  async _handleGetLimit () {
-    // TODO: add unit test
-    return this._transfers.getMaximum()
-  }
-
-  _stringNegate (num) {
-    if (isNaN(+num)) {
-      throw new Error('invalid number: ' + num)
-    } else if (num.charAt(0) === '-') {
-      return num.substring(1)
-    } else {
-      return '-' + num
-    }
-  }
-
-  async getLimit () {
-    this.assertConnectionBeforeCalling('getLimit')
-    const peerMaxBalance = await this._rpc.message(
-      [{
-        protocolName: 'limit',
-        contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-        data: Buffer.from([ LIMIT_REQUEST ])
-      }]
-    )
-    const { protocolMap } = (protocolDataToIlpAndCustom(peerMaxBalance))
-    if (protocolMap.limit) {
-      return this._stringNegate(protocolMap.limit)
-    } else {
-      throw new Error('Failed to get limit of peer.')
-    }
-  }
-
-  async getPeerBalance () {
-    this.assertConnectionBeforeCalling('getPeerBalance')
-    const btpResponse = await this._rpc.message(
-      [{
-        protocolName: 'balance',
-        contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-        data: Buffer.from([ BALANCE_REQUEST ])
-      }]
-    )
-
-    const { protocolMap } = protocolDataToIlpAndCustom(btpResponse)
-    const balance = int64.toString(protocolMap.balance)
-    if (!balance) {
-      throw new Error('Could not get peer balance.')
-    }
-
-    return this._stringNegate(balance)
-  }
-
   _validateFulfillment (fulfillment, condition) {
     this._validator.validateFulfillment(fulfillment)
     const hash = crypto.createHash('sha256')
@@ -737,3 +557,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     }
   }
 }
+
+PluginPaymentChannel.lpiVersion = 2
+module.exports = PluginPaymentChannel
