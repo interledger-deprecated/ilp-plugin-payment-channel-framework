@@ -116,7 +116,8 @@ class PluginPaymentChannel extends EventEmitter2 {
       handlers: {
         [Btp.TYPE_PREPARE]: this._handleTransfer.bind(this),
         [Btp.TYPE_FULFILL]: this._handleFulfillCondition.bind(this),
-        [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this)
+        [Btp.TYPE_REJECT]: this._handleRejectIncomingTransfer.bind(this),
+        [Btp.TYPE_MESSAGE]: this._handleMessage.bind(this)
       },
       // checks the token with which incoming sockets are authenticated. If there
       // is no listener, and addSocket will not be called for incoming
@@ -237,6 +238,45 @@ class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('disconnect')
   }
 
+  async _handleMessage ({ requestId, data }) {
+    const { ilp, custom, protocolMap } = protocolDataToIlpAndCustom(data)
+    const message = {
+      id: requestId
+    }
+
+    if (ilp) message.ilp = ilp
+    if (custom) message.custom = custom
+
+    // if there are side protocols only
+    if (protocolMap.info) {
+      return [{
+        protocolName: 'info',
+        contentType: Btp.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify(this.getInfo()))
+      }]
+    } else if (protocolMap.balance) {
+      return [{
+        protocolName: 'balance',
+        contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
+        data: int64.toBuffer(await this._handleGetBalance())
+      }]
+    } else if (protocolMap.limit) {
+      return [{
+        protocolName: 'limit',
+        contentType: Btp.MIME_APPLICATION_JSON,
+        data: Buffer.from(JSON.stringify(await this._handleGetLimit()))
+      }]
+    } else if (protocolMap.custom) {
+      // Don't throw -- this message will be emitted.
+    } else {
+      if (this._paychanContext.rpc.handleProtocols) {
+        return this._paychanContext.rpc.handleProtocols(protocolMap)
+      } else {
+        throw new Error('Unsupported side protocol.')
+      }
+    }
+  }
+
   async sendTransfer (preTransfer) {
     this.assertConnectionBeforeCalling('sendTransfer')
     const transfer = Object.assign({}, preTransfer)
@@ -250,6 +290,7 @@ class PluginPaymentChannel extends EventEmitter2 {
       await this._rpc.prepare(transfer, ilpAndCustomToProtocolData(transfer))
       this.debug('transfer acknowledged ' + transfer.id)
     } catch (e) {
+      console.log('ERROR:', e)
       this.debug(e.name + ' during transfer ' + transfer.id)
       throw e
     }
@@ -257,6 +298,7 @@ class PluginPaymentChannel extends EventEmitter2 {
     this._safeEmit('outgoing_prepare', transfer)
 
     return new Promise((resolve, reject) => {
+      console.log('LISTENING FOR EVENTS')
       const that = this
 
       function cleanUp () {
@@ -267,12 +309,14 @@ class PluginPaymentChannel extends EventEmitter2 {
       }
 
       function onReject (_transfer, reason) {
+        console.log('EV REJECT')
         if (_transfer.id !== transfer.id) return
         cleanUp()
-        reject(new InterledgerError(transfer, reason))
+        reject(new InterledgerError(reason))
       }
 
       function onFulfill (_transfer, fulfillment, data) {
+        console.log('EV FULFILL')
         if (_transfer.id !== transfer.id) return
         cleanUp()
         resolve({ fulfillment, data })
@@ -280,6 +324,23 @@ class PluginPaymentChannel extends EventEmitter2 {
 
       that.on('outgoing_reject', onReject)
       that.on('outgoing_fulfill', onFulfill)
+    })
+  }
+
+  _expireTransfer (transfer) {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        reject(new InterledgerError({
+          code: 'R00',
+          name: 'Transfer Timed Out',
+          triggered_by: '',
+          forwarded_by: [],
+          triggered_at: new Date(),
+          additional_info: {
+            message: transfer.id + ' expired'
+          }
+        }))
+      }, Date.parse(transfer.expiresAt) - Date.now())
     })
   }
 
@@ -308,20 +369,24 @@ class PluginPaymentChannel extends EventEmitter2 {
 
     this._safeEmit('incoming_prepare', transfer)
 
-    // set up expiry here too, so both sides can send the expiration message
-    let response
-    try {
-      response = await Promise.race([
-        this._transferHandler(transfer),
-        this._expireTransfer(transfer.id)
-      ])
-    } catch (e) {
-      await this.rejectIncomingTransfer(transfer.id, e.reason)
-      return
-    }
+    // TODO: better way of finishing RPC request before responding
+    setImmediate(async () => {
+      let response
+      try {
+        response = await Promise.race([
+          this._transferHandler(transfer),
+          this._expireTransfer(transfer)
+        ])
+      } catch (e) {
+        console.log(e)
+        await this.rejectIncomingTransfer(transfer.id, e.reason)
+        return
+      }
 
-    // fulfillmentInfo: { fulfillment (base64url), data (base64url) }
-    await this.fulfillCondition(transfer.id, response.fulfillment, response.data)
+      // fulfillmentInfo: { fulfillment (base64url), data (base64url) }
+      console.log('SENDING A RESPONSE:', response)
+      await this.fulfillCondition(transfer.id, response.fulfillment, response.data)
+    })
   }
 
   async fulfillCondition (transferId, fulfillment) {
@@ -419,6 +484,7 @@ class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.cancel(transferId, reason)
     this.debug('rejected ' + transferId)
 
+    console.log('REASON FOR REJECT IS:', reason)
     const rejectionReason = ilpPacket.serializeIlpError({
       code: reason.code,
       name: reason.name,
