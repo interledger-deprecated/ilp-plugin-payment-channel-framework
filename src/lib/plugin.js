@@ -460,11 +460,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._validateFulfillment(fulfillment, transferInfo.transfer.executionCondition)
     await this._transfers.fulfill(transferId, fulfillment)
     this._safeEmit('incoming_fulfill', transferInfo.transfer, fulfillment)
-    const protocolData = [{
-      protocolName: 'ilp',
-      contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-      data: ilp || new Buffer([ 0x09, 0x00 ])
-    }]
+    const protocolData = ilp
+      ? [{ protocolName: 'ilp', contentType: Btp.MIME_APPLICATION_OCTET_STREAM, data: ilp }]
+      : []
     const result = await this._rpc.fulfill(transferId, fulfillment, protocolData)
 
     const { protocolMap } = protocolDataToIlpAndCustom(result)
