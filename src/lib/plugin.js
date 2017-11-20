@@ -106,6 +106,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
         key: opts.listener.key,
         ca: opts.listener.ca
       })
+      this._listener.listen().catch((err) => {
+        debug('Failed starting websocket server', err)
+      })
     } else {
       this._listener = null
     }
@@ -226,15 +229,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._connectPromise = new Promise((resolve) => {
       finishConnectPromise = resolve
     })
-
-    if (this._listener) {
-      try {
-        await this._listener.listen()
-      } catch (err) {
-        debug('Failed starting websocket server', err)
-        throw err
-      }
-    }
 
     try {
       if (!(this._info && this._prefix)) {
