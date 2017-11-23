@@ -49,10 +49,10 @@ class MockSocket extends EventEmitter {
    * Registers a packet handler. Each packet received by an instance of
    * MockSocket needs to be processed by such a handler and each handler only
    * processes one packet. The handlers are called in the same order as they
-   * were registered, so the first received packet is proccessed by the 
-   * handler that was registered first, the second packet by the handler 
+   * were registered, so the first received packet is proccessed by the
+   * handler that was registered first, the second packet by the handler
    * that registered second etc.
-   * 
+   *
    * @param  {[type]}   expectedType [The expected type of the received packet]
    * @param  {Function} fn           [Function that processes the received packet]
    * @return {[type]}                [Returns a MockSocket instance for function chaining]
@@ -82,11 +82,11 @@ class MockSocket extends EventEmitter {
   }
 
   /**
-   * Returns a promise indicating whether all packet handlers registered 
+   * Returns a promise indicating whether all packet handlers registered
    * via .reply() have been called. If any of the handlers throws
    * an error the promise will reject. If all handlers finish without error,
    * the promise will resolve.
-   * 
+   *
    * @return {Boolean} True if all handlers finished without errors, false otherwise.
    */
   async isDone () {
