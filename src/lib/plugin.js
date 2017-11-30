@@ -40,9 +40,9 @@ const assertOptionType = (opts, field, type) => {
   }
 }
 
-const moduleName = (paymentChannelBackend) => {
+const moduleName = (paymentChannelBackend, opts) => {
   const pluginName = paymentChannelBackend.pluginName
-  return 'ilp-plugin-' + pluginName.toLowerCase()
+  return 'ilp-plugin-' + pluginName.toLowerCase() + (opts.listener ? ':server' : ':client')
 }
 
 module.exports = class PluginPaymentChannel extends EventEmitter2 {
@@ -53,7 +53,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this._opts = opts
     this._stateful = !!(opts._backend || opts._store)
     this.debug = paymentChannelBackend
-      ? debug(moduleName(paymentChannelBackend))
+      ? debug(moduleName(paymentChannelBackend, opts))
       : debug('ilp-plugin-virtual')
 
     if (!this._stateful && paymentChannelBackend) {
