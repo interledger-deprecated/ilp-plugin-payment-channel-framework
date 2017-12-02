@@ -16,6 +16,7 @@ const Validator = require('../util/validator')
 const getBackend = require('../util/backend')
 const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
   require('../util/protocolDataConverter')
+const Store = require('../../test/helpers/objStore')
 
 const errors = require('../util/errors')
 const NotAcceptedError = errors.NotAcceptedError
@@ -48,6 +49,11 @@ const moduleName = (paymentChannelBackend, opts) => {
 module.exports = class PluginPaymentChannel extends EventEmitter2 {
   constructor (paymentChannelBackend, opts) {
     super()
+
+    if (opts.store && !opts._store) {
+      opts._store = new Store()
+    }
+
     const Backend = getBackend(opts._store)
 
     this._opts = opts
