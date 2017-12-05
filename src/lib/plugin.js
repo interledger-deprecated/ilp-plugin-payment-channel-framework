@@ -545,11 +545,19 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     await this._transfers.cancel(transferId, reason)
     this.debug('rejected ' + transferId)
 
+    let forwardedBy
+    if (Array.isArray(reason.forwarded_by)) {
+      forwardedBy = reason.forwarded_by
+    } else if (typeof reason.forwarded_by === 'string') {
+      forwardedBy = [reason.forwarded_by]
+    } else {
+      forwardedBy = this.getAccount()
+    }
     const rejectionReason = ilpPacket.serializeIlpError({
       code: reason.code,
       name: reason.name,
       triggeredBy: reason.triggered_by,
-      forwardedBy: reason.forwarded_by,
+      forwardedBy,
       triggeredAt: reason.triggered_at,
       data: JSON.stringify(reason.additional_info)
     })
@@ -566,11 +574,12 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     const transferId = data.id
     const { ilp } = protocolDataToIlpAndCustom(data)
     const packet = ilpPacket.deserializeIlpPacket(Buffer.from(ilp, 'base64')).data
+    const lastConnector = packet.forwardedBy[packet.forwardedBy.length - 1]
     const rejectionReason = {
       code: packet.code,
       name: packet.name,
       triggered_by: packet.triggeredBy,
-      forwarded_by: packet.forwardedBy,
+      forwarded_by: lastConnector,
       triggered_at: packet.triggeredAt
     }
     try {
