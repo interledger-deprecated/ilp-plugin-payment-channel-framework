@@ -360,7 +360,7 @@ describe('Conditional Transfers', () => {
         code: 'F00',
         name: 'Bad Request',
         triggeredBy: 'example.red.server',
-        forwardedBy: [],
+        forwardedBy: ['test.some.connector'],
         triggeredAt: new Date(),
         data: JSON.stringify({ extra: 'data' })
       }
@@ -369,7 +369,7 @@ describe('Conditional Transfers', () => {
         code: 'F00',
         name: 'Bad Request',
         triggered_by: 'example.red.server',
-        forwarded_by: [],
+        forwarded_by: 'test.some.connector',
         triggered_at: new Date(),
         additional_info: { extra: 'data' }
       }
@@ -403,16 +403,16 @@ describe('Conditional Transfers', () => {
       const ilpError = {
         code: 'F00',
         name: 'Bad Request',
-        triggeredBy: 'g.your.friendly.peer',
-        forwardedBy: [],
+        triggeredBy: 'test.your.friendly.peer',
+        forwardedBy: ['test.some.connector', 'test.some.other.connector'],
         triggeredAt: new Date(),
         data: JSON.stringify({ extra: 'data' })
       }
       const reason = {
         code: 'F00',
         name: 'Bad Request',
-        triggered_by: 'g.your.friendly.peer',
-        forwarded_by: [],
+        triggered_by: 'test.your.friendly.peer',
+        forwarded_by: 'test.some.other.connector',
         triggered_at: new Date(),
         additional_info: { extra: 'data' }
       }
