@@ -551,7 +551,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     } else if (typeof reason.forwarded_by === 'string') {
       forwardedBy = [reason.forwarded_by]
     } else {
-      forwardedBy = this.getAccount()
+      forwardedBy = [this.getAccount()]
     }
     const rejectionReason = ilpPacket.serializeIlpError({
       code: reason.code,

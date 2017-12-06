@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/interledger/ilp-plugin-virtual.git"
+    "url": "git+https://github.com/interledgerjs/ilp-plugin-payment-channel-framework.git"
   },
   "keywords": [
     "virtual",
@@ -27,9 +27,9 @@
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/interledger/ilp-plugin-virtual/issues"
+    "url": "https://github.com/interledgerjs/ilp-plugin-payment-channel-framework/issues"
   },
-  "homepage": "https://github.com/interledger/ilp-plugin-virtual#readme",
+  "homepage": "https://github.com/interledgerjs/ilp-plugin-payment-channel-framework#readme",
   "devDependencies": {
     "chai": "^3.5.0",
     "chai-as-promised": "^6.0.0",
