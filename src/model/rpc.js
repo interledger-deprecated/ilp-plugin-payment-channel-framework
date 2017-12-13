@@ -45,6 +45,7 @@ module.exports = class BtpRpc extends EventEmitter {
     this._client = client
     this._plugin = plugin
     this._authCheck = authCheck
+    this._authSideProtocols = []
     this.debug = debug
   }
 
@@ -87,7 +88,7 @@ module.exports = class BtpRpc extends EventEmitter {
         protocolName: 'auth_token',
         contentType: btpPacket.MIME_TEXT_PLAIN_UTF8,
         data: Buffer.from(auth.token, 'utf8')
-      }]))
+      }, ...this._authSideProtocols ]))
 
       return new Promise((resolve, reject) => {
         const handleAuthResponse = (type, data) => {
@@ -124,6 +125,10 @@ module.exports = class BtpRpc extends EventEmitter {
 
   setAuthToken (token) {
     this._token = token
+  }
+
+  setAuthSideProtocols (sideProtocols) {
+    this._authSideProtocols = []
   }
 
   async handleMessage (socketIndex, message) {

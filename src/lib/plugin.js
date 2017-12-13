@@ -157,6 +157,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this.getAccount = () => this._paychan.getAccount(this._paychanContext)
       this.getPeerAccount = () => this._paychan.getPeerAccount(this._paychanContext)
       this._getAuthToken = () => this._paychan.getAuthToken(this._paychanContext)
+      if (this._paychan.getAuthSideProtocols) {
+        this._getAuthSideProtocols = () => this._paychan.getAuthSideProtocols(this._paychanContext)
+      }
     } else {
       this._info = opts.info || null
       if (this._info) {
@@ -189,6 +192,9 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.isConnected = () => this._connected
     this.isAuthorized = (authToken) => (authToken === this._getAuthToken())
     this._rpc.setAuthToken(this._getAuthToken())
+    if (this._getAuthSideProtocols) {
+      this._rpc.setAuthSideProtocols(this._getAuthSideProtocols())
+    }
   }
 
   // don't throw errors even if the event handler throws
