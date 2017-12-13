@@ -193,7 +193,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
     this.isAuthorized = (authToken) => (authToken === this._getAuthToken())
     this._rpc.setAuthToken(this._getAuthToken())
     if (this._getAuthSideProtocols) {
-      this._rpc.setAuthSideProtocols(this._getAuthSideProtocols())
+      this._rpc.setGetAuthSideProtocols(this._getAuthSideProtocols)
     }
   }
 
