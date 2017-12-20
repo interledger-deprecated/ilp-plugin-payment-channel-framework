@@ -43,7 +43,7 @@ CONNECTOR_LEDGERS={
         key: '/tmp/snakeoil.key',
         ca: '/tmp/snakeoil-ca.crt'
       },
-      "token": "shared_secret", // auth_token which the server expects the client to send
+      "incomingSecret": "shared_secret", // auth_token which the server expects the client to send
       // the server determines the properties of the trustline
       "maxBalance": "1000000000",
       "prefix": "g.eur.mytrustline.",
@@ -100,6 +100,35 @@ LedgerPlugin class.
 - [Example Code (w/ Payments)](#example-code-with-unconditional-payment-based-settlement)
 - [Extended Payment Channel Module API](#payment-channel-module-api)
 - [Plugin Context API](#plugin-context-api)
+
+
+## Minimal client-server config example
+```js
+const ObjStore = require('./test/helpers/objStore')
+const Plugin = require('.')
+const port = 9000
+const incomingSecret = 'pass'
+
+const server = new Plugin({
+  listener: { port },
+  prefix: 'some.ledger.',
+  info: {},
+  incomingSecret,
+  maxBalance: '10000',
+  _store: new ObjStore()
+})
+
+const client = new Plugin({
+  server: 'btp+ws://:' + incomingSecret + '@localhost:' + port,
+  maxBalance: '10000',
+  _store: new ObjStore()
+})
+
+server.connect()
+  .then(() => client.connect())
+  .then(() => client.disconnect())
+  .then(() => server.disconnect())
+```
 
 ## Example Code with Claim-Based Settlement
 

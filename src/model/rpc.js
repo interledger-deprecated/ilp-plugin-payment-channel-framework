@@ -122,10 +122,6 @@ module.exports = class BtpRpc extends EventEmitter {
     }
   }
 
-  setAuthToken (token) {
-    this._token = token
-  }
-
   async handleMessage (socketIndex, message) {
     const socketData = this._sockets[socketIndex]
     _assertSocket(socketData)
