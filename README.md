@@ -101,6 +101,35 @@ LedgerPlugin class.
 - [Extended Payment Channel Module API](#payment-channel-module-api)
 - [Plugin Context API](#plugin-context-api)
 
+
+## Minimal client-server config example
+```js
+const ObjStore = require('./test/helpers/objStore')
+const Plugin = require('.')
+const port = 9000
+const incomingSecret = 'pass'
+
+const server = new Plugin({
+  listener: { port },
+  prefix: 'some.ledger.',
+  info: {},
+  incomingSecret,
+  maxBalance: '10000',
+  _store: new ObjStore()
+})
+
+const client = new Plugin({
+  server: 'btp+ws://:' + incomingSecret + '@localhost:' + port,
+  maxBalance: '10000',
+  _store: new ObjStore()
+})
+
+server.connect()
+  .then(() => client.connect())
+  .then(() => client.disconnect())
+  .then(() => server.disconnect())
+```
+
 ## Example Code with Claim-Based Settlement
 
 Claim-based settlement is the simple case that this framework uses as its
