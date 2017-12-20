@@ -18,7 +18,7 @@ const info = {
 const options = {
   prefix: 'example.red.',
   maxBalance: '1000000',
-  server: 'btp+wss://user:placeholder@example.com/rpc',
+  server: 'btp+wss://:placeholder@example.com/rpc',
   info: info,
   incomingSecret: 'placeholder'
 }
@@ -33,7 +33,7 @@ describe('Info', () => {
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
 
-    await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'placeholder' })
+    await this.plugin.addSocket(this.mockSocket, { username: '', token: 'placeholder' })
     await this.plugin.connect()
   })
 
@@ -138,13 +138,13 @@ describe('Info', () => {
     })
   })
 
-  describe('isAuthorized', () => {
+  describe('authCheck', () => {
     it('should authorize its own auth token', function () {
-      assert.isTrue(this.plugin.isAuthorized(this.plugin._getAuthToken()))
+      assert.isTrue(this.plugin._rpc._authCheck('', 'placeholder'))
     })
 
     it('should not authorize any other token', function () {
-      assert.isFalse(this.plugin.isAuthorized('any other token'))
+      assert.isFalse(this.plugin._rpc._authCheck('', 'any other token'))
     })
   })
 

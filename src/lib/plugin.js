@@ -156,7 +156,6 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
 
       this.getAccount = () => this._paychan.getAccount(this._paychanContext)
       this.getPeerAccount = () => this._paychan.getPeerAccount(this._paychanContext)
-      this._getAuthToken = () => this._paychan.getAuthToken(this._paychanContext)
     } else {
       this._info = opts.info || null
       if (this._info) {
@@ -181,14 +180,11 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       this.getInfo = () => this._info && JSON.parse(JSON.stringify(this._info))
       this.getAccount = () => (this._prefix + this._accountName)
       this.getPeerAccount = () => (this._prefix + this._peerAccountName)
-      this._getAuthToken = () => opts.token
     }
 
     this.addSocket = this._rpc.addSocket.bind(this._rpc)
     // this.receive = this._rpc.handleMessage.bind(this._rpc)
     this.isConnected = () => this._connected
-    this.isAuthorized = (authToken) => (authToken === this._getAuthToken())
-    this._rpc.setAuthToken(this._getAuthToken())
   }
 
   // don't throw errors even if the event handler throws

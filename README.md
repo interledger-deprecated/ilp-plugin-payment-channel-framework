@@ -43,7 +43,7 @@ CONNECTOR_LEDGERS={
         key: '/tmp/snakeoil.key',
         ca: '/tmp/snakeoil-ca.crt'
       },
-      "token": "shared_secret", // auth_token which the server expects the client to send
+      "incomingSecret": "shared_secret", // auth_token which the server expects the client to send
       // the server determines the properties of the trustline
       "maxBalance": "1000000000",
       "prefix": "g.eur.mytrustline.",
