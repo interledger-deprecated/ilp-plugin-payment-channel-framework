@@ -400,12 +400,14 @@ describe('Conditional Transfers', () => {
         return btpPacket.serializeResponse(requestId, [])
       })
 
+      const triggeredAt = new Date()
+
       const ilpError = {
         code: 'F00',
         name: 'Bad Request',
         triggeredBy: 'test.your.friendly.peer',
         forwardedBy: ['test.some.connector', 'test.some.other.connector'],
-        triggeredAt: new Date(),
+        triggeredAt,
         data: JSON.stringify({ extra: 'data' })
       }
       const reason = {
@@ -413,7 +415,7 @@ describe('Conditional Transfers', () => {
         name: 'Bad Request',
         triggered_by: 'test.your.friendly.peer',
         forwarded_by: 'test.some.other.connector',
-        triggered_at: new Date(),
+        triggered_at: triggeredAt,
         additional_info: { extra: 'data' }
       }
 
