@@ -555,7 +555,7 @@ module.exports = class PluginPaymentChannel extends EventEmitter2 {
       triggeredBy: reason.triggered_by,
       forwardedBy,
       triggeredAt: reason.triggered_at,
-      data: JSON.stringify(reason.additional_info)
+      data: JSON.stringify(reason.additional_info) || ''
     })
 
     this._safeEmit('incoming_reject', transferInfo.transfer, reason)
